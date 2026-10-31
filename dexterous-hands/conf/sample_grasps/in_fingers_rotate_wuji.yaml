@@ -1,0 +1,42 @@
+grasp_generation:
+  num_envs: 4096
+  num_grasps: 64
+  min_grasps: 16
+  perturb_range: 0.2
+  required_num_surface_distance_fingers: 3
+  surface_distance_threshold: 0.02
+  max_penetration: 0.003
+  stability_steps: 1000
+  max_displacement: 0.02
+  obj_pos_shift: "-0.01,0.01,-0.01,0.01,0.0,0.0"
+  obj_euler_range: "0,0,0,0,-180,180"
+  output_file: src/assets/grasps/in_fingers_rotate_wuji_grasps_64.pt
+
+scene_options:
+  robot:
+    default_root_pos: [0.0, -0.07, 0.42]
+    default_root_quat: [0.707107, 0.707107, 0.0, 0.0]
+    default_dofs_pos:
+      r_thumb_cmc_flex: 1.1
+      r_thumb_cmc_abd: -0.3491
+      r_thumb_mcp: -0.33
+      r_thumb_ip: 0.64
+      r_index_finger_mcp_flex: 1.31
+      r_index_finger_mcp_abd: -0.01
+      r_index_finger_pip: 0.25
+      r_index_finger_dip: 0.61
+      r_middle_finger_mcp_flex: 1.06
+      r_middle_finger_mcp_abd: 0.1
+      r_middle_finger_pip: 0.68
+      r_middle_finger_dip: 0.34
+      r_ring_finger_mcp_flex: 1.29
+      r_ring_finger_mcp_abd: 0.01
+      r_ring_finger_pip: 0.28
+      r_ring_finger_dip: 0.38
+      r_pinky_mcp_flex: 1.31
+      r_pinky_mcp_abd: 0.11
+      r_pinky_pip: 0.46
+      r_pinky_dip: 0.23
+  obj:
+    default_root_pos: [0.0, 0.0, 0.5]
+    default_root_quat: [1.0, 0.0, 0.0, 0.0]

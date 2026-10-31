@@ -1,0 +1,234 @@
+{
+  "hand": "sharpa",
+  "profile": "low",
+  "target_count": 128,
+  "active_count": 130,
+  "links": [
+    {
+      "link_name": "right_hand_C_MC",
+      "region": "palm",
+      "shape": [
+        7,
+        8
+      ],
+      "count": 56,
+      "radius_m": 0.00523235,
+      "max_coverage_distance_m": 0.0049831857967516865,
+      "contact_patch_area_m2": 0.002501397594453977
+    },
+    {
+      "link_name": "right_thumb_DP",
+      "region": "thumb",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00470008,
+      "max_coverage_distance_m": 0.004476263189720429,
+      "contact_patch_area_m2": 0.00013954234392494138
+    },
+    {
+      "link_name": "right_thumb_PP",
+      "region": "thumb",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00564019,
+      "max_coverage_distance_m": 0.005371606516394994,
+      "contact_patch_area_m2": 0.00020559004234804026
+    },
+    {
+      "link_name": "right_thumb_MC",
+      "region": "thumb",
+      "shape": [
+        2,
+        3
+      ],
+      "count": 6,
+      "radius_m": 0.00582092,
+      "max_coverage_distance_m": 0.005543725985272488,
+      "contact_patch_area_m2": 0.00031398050306853285
+    },
+    {
+      "link_name": "right_index_DP",
+      "region": "index",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00380838,
+      "max_coverage_distance_m": 0.003627025163326723,
+      "contact_patch_area_m2": 8.804319600731771e-05
+    },
+    {
+      "link_name": "right_index_MP",
+      "region": "index",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00460746,
+      "max_coverage_distance_m": 0.0043880544030933215,
+      "contact_patch_area_m2": 0.00013250759111533677
+    },
+    {
+      "link_name": "right_index_PP",
+      "region": "index",
+      "shape": [
+        3,
+        2
+      ],
+      "count": 6,
+      "radius_m": 0.00535275,
+      "max_coverage_distance_m": 0.005097853769693765,
+      "contact_patch_area_m2": 0.0002590152723707034
+    },
+    {
+      "link_name": "right_middle_DP",
+      "region": "middle",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00475127,
+      "max_coverage_distance_m": 0.0045250174905491925,
+      "contact_patch_area_m2": 0.00012972273376040454
+    },
+    {
+      "link_name": "right_middle_MP",
+      "region": "middle",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00477955,
+      "max_coverage_distance_m": 0.004551946637080757,
+      "contact_patch_area_m2": 0.00013972940088553156
+    },
+    {
+      "link_name": "right_middle_PP",
+      "region": "middle",
+      "shape": [
+        3,
+        2
+      ],
+      "count": 6,
+      "radius_m": 0.00566345,
+      "max_coverage_distance_m": 0.005393760712985257,
+      "contact_patch_area_m2": 0.00027617866307010335
+    },
+    {
+      "link_name": "right_ring_DP",
+      "region": "ring",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00414992,
+      "max_coverage_distance_m": 0.00395230456183691,
+      "contact_patch_area_m2": 9.602925788886955e-05
+    },
+    {
+      "link_name": "right_ring_MP",
+      "region": "ring",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00477955,
+      "max_coverage_distance_m": 0.004551946637080757,
+      "contact_patch_area_m2": 0.00013972940088553156
+    },
+    {
+      "link_name": "right_ring_PP",
+      "region": "ring",
+      "shape": [
+        3,
+        2
+      ],
+      "count": 6,
+      "radius_m": 0.00566345,
+      "max_coverage_distance_m": 0.005393760712985257,
+      "contact_patch_area_m2": 0.00027617866307010335
+    },
+    {
+      "link_name": "right_pinky_DP",
+      "region": "pinky",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00434643,
+      "max_coverage_distance_m": 0.004139448327047434,
+      "contact_patch_area_m2": 0.00011512903288821884
+    },
+    {
+      "link_name": "right_pinky_MP",
+      "region": "pinky",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00432361,
+      "max_coverage_distance_m": 0.004117717970894792,
+      "contact_patch_area_m2": 0.00012149861193782517
+    },
+    {
+      "link_name": "right_pinky_PP",
+      "region": "pinky",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00563467,
+      "max_coverage_distance_m": 0.005366349458632112,
+      "contact_patch_area_m2": 0.00020945183996676963
+    },
+    {
+      "link_name": "right_pinky_MC",
+      "region": "pinky",
+      "shape": [
+        2,
+        3
+      ],
+      "count": 6,
+      "radius_m": 0.00537563,
+      "max_coverage_distance_m": 0.005119638196139943,
+      "contact_patch_area_m2": 0.0002612490153687763
+    }
+  ],
+  "coverage": "Palm and finger contact patches; excludes dorsal surfaces and joint gaps",
+  "radius_note": "1.05 times maximum sampled patch-to-nearest-probe distance, including boundaries",
+  "source_layout_sha256": "0e7ff7239f46bc3def68a110d34eeb294997b0de0f051dc5a449f79752680260",
+  "source_geometry": {
+    "right_hand_C_MC": "8c52941db271e9331f0b32ec581c078af7f8cb372fb97f021d5b1dec2d2426ae",
+    "right_thumb_DP": "437f363ca7a40b6e9b9152ebb81db249c51de71565cdb44b7df6e2cdf0da3312",
+    "right_thumb_PP": "795b35f943c4272314d5e72497aaea2ef998458b0259a6609577d3694aeff869",
+    "right_thumb_MC": "deb6d97eb2d7223d72c23ebb32f874644dcf78848389f14dcabe3016aae5dd6c",
+    "right_index_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_index_MP": "98ad7e6e990f61857d6ad28860bba7e0dcba78761a513d60fdc527e9d56bbe8e",
+    "right_index_PP": "ed975b59e2569759ff28a397dab71d84667161d3b90b41d625bc5e1f5ac6536c",
+    "right_middle_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_middle_MP": "98ad7e6e990f61857d6ad28860bba7e0dcba78761a513d60fdc527e9d56bbe8e",
+    "right_middle_PP": "ed975b59e2569759ff28a397dab71d84667161d3b90b41d625bc5e1f5ac6536c",
+    "right_ring_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_ring_MP": "98ad7e6e990f61857d6ad28860bba7e0dcba78761a513d60fdc527e9d56bbe8e",
+    "right_ring_PP": "ed975b59e2569759ff28a397dab71d84667161d3b90b41d625bc5e1f5ac6536c",
+    "right_pinky_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_pinky_MP": "98ad7e6e990f61857d6ad28860bba7e0dcba78761a513d60fdc527e9d56bbe8e",
+    "right_pinky_PP": "ed975b59e2569759ff28a397dab71d84667161d3b90b41d625bc5e1f5ac6536c",
+    "right_pinky_MC": "1f8207aff0f2f6ca2f1de1a8bbbbcd4183300bc3778d55821c2aae9b490b7dd3"
+  }
+}

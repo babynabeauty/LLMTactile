@@ -1,0 +1,200 @@
+{
+  "source_url": "https://docs.wuji.tech/docs/en/wuji-glove/latest/sdk-data-reference/tactile/",
+  "active_count": 526,
+  "region_counts": {
+    "palm": 288,
+    "thumb": 41,
+    "index": 43,
+    "middle": 58,
+    "ring": 52,
+    "pinky": 44
+  },
+  "geometry": "Wuji Hand 2 Beta 2 right; fitted positions, not measured robot hardware coordinates",
+  "layout_note": "Dense per-link grids preserve regional counts and rough placement. No hardware row/column correspondence.",
+  "radius_note": "Half the median nearest-neighbor spacing per link; simulation footprint, not vendor calibration.",
+  "links": [
+    {
+      "link_name": "r_wrist",
+      "region": "palm",
+      "shape": [
+        16,
+        18
+      ],
+      "count": 288,
+      "radius_m": 0.00139755
+    },
+    {
+      "link_name": "r_thumb_tip_sensor_frame",
+      "region": "thumb",
+      "shape": [
+        3,
+        4
+      ],
+      "count": 12,
+      "radius_m": 0.00220602
+    },
+    {
+      "link_name": "r_thumb_middle",
+      "region": "thumb",
+      "shape": [
+        3,
+        5
+      ],
+      "count": 15,
+      "radius_m": 0.00160087
+    },
+    {
+      "link_name": "r_thumb_proximal_abd",
+      "region": "thumb",
+      "shape": [
+        2,
+        7
+      ],
+      "count": 14,
+      "radius_m": 0.00121605
+    },
+    {
+      "link_name": "r_index_finger_tip_sensor_frame",
+      "region": "index",
+      "shape": [
+        2,
+        4
+      ],
+      "count": 8,
+      "radius_m": 0.00172504
+    },
+    {
+      "link_name": "r_index_finger_middle",
+      "region": "index",
+      "shape": [
+        3,
+        5
+      ],
+      "count": 15,
+      "radius_m": 0.00138541
+    },
+    {
+      "link_name": "r_index_finger_proximal_abd",
+      "region": "index",
+      "shape": [
+        4,
+        5
+      ],
+      "count": 20,
+      "radius_m": 0.00137678
+    },
+    {
+      "link_name": "r_middle_finger_tip_sensor_frame",
+      "region": "middle",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.00172489
+    },
+    {
+      "link_name": "r_middle_finger_middle",
+      "region": "middle",
+      "shape": [
+        3,
+        6
+      ],
+      "count": 18,
+      "radius_m": 0.00118428
+    },
+    {
+      "link_name": "r_middle_finger_proximal_abd",
+      "region": "middle",
+      "shape": [
+        4,
+        6
+      ],
+      "count": 24,
+      "radius_m": 0.00118009
+    },
+    {
+      "link_name": "r_ring_finger_tip_sensor_frame",
+      "region": "ring",
+      "shape": [
+        2,
+        5
+      ],
+      "count": 10,
+      "radius_m": 0.00140889
+    },
+    {
+      "link_name": "r_ring_finger_middle",
+      "region": "ring",
+      "shape": [
+        3,
+        6
+      ],
+      "count": 18,
+      "radius_m": 0.00118428
+    },
+    {
+      "link_name": "r_ring_finger_proximal_abd",
+      "region": "ring",
+      "shape": [
+        4,
+        6
+      ],
+      "count": 24,
+      "radius_m": 0.00118009
+    },
+    {
+      "link_name": "r_pinky_tip_sensor_frame",
+      "region": "pinky",
+      "shape": [
+        3,
+        4
+      ],
+      "count": 12,
+      "radius_m": 0.00169513
+    },
+    {
+      "link_name": "r_pinky_middle",
+      "region": "pinky",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0016875
+    },
+    {
+      "link_name": "r_pinky_proximal_abd",
+      "region": "pinky",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.00168751
+    }
+  ],
+  "source_sha256": {
+    "reference/tactile-layout-change.png": "bb8de9ee5d714ff9072695ebecdcfa1e05cc0397cdee358c4bdb66f9e7256474",
+    "reference/tactile-matrix-layout.png": "2f709c9d2e47d8db301ca6bbb169e806709e7f209c5713db37506257c18456b4"
+  },
+  "mesh_sha256": {
+    "r_wrist": "748cf6a16bc5bfedf9c7e2ee489459f726740680db1449221133be570f9ee505",
+    "r_thumb_tip_sensor_frame": "7a94ebdd1c50ec5b62e73abd51848fe15589d9eb07e2fa3b1eab6567e5f08c12",
+    "r_thumb_middle": "a3e9851cd3aed770fb0ed2b05b2ceca86980af1bfef2fbc8e1925e9a6110f56f",
+    "r_thumb_proximal_abd": "d9e28b15b054ede554f23524c32f430fefa3622eb9fa10016c39fec10a2638e8",
+    "r_index_finger_tip_sensor_frame": "4142c661bbe09bcbbee8c6188676915986bcdcc49f397720252864148665da37",
+    "r_index_finger_middle": "2e1dd153fb0725aa3caed4dd49cb918da0378e875c4b9442bd147793a111f7d7",
+    "r_index_finger_proximal_abd": "f1ff36b8d54ce2bf93f42424da9392df6568dc1b286ff588157fe6030797f1f6",
+    "r_middle_finger_tip_sensor_frame": "4142c661bbe09bcbbee8c6188676915986bcdcc49f397720252864148665da37",
+    "r_middle_finger_middle": "8f7234c6ef133c11ecea89e3d1a94f4842dec9099c53faccd9312115d86fed4d",
+    "r_middle_finger_proximal_abd": "483d9af13da2a605263cf27cbbc789f2dfcd571cb0a37b54c9322e5705c7ada9",
+    "r_ring_finger_tip_sensor_frame": "4142c661bbe09bcbbee8c6188676915986bcdcc49f397720252864148665da37",
+    "r_ring_finger_middle": "9069d35b6f34fe23b49a7b28f8ef2dfd36ee18bebcf72de039e550f38d6a36cb",
+    "r_ring_finger_proximal_abd": "bfc1ac8e3324942ecfd2dae448b925db3bf668a03b3aaa36a050aef1d8734d40",
+    "r_pinky_tip_sensor_frame": "b9c9df3fee37dd4f30072c15b65bd1019c4cea1b90dbba9b082eb05b6678d561",
+    "r_pinky_middle": "12466b870cf8cc47aacdc02a535474d65bce3bf128840a8e471c4fede43d57ee",
+    "r_pinky_proximal_abd": "321e9e615166eab4cd87ad4bc8609a7c19944fd7200f957d11bb020fa255bb72"
+  },
+  "mjcf_sha256": "d5057d3eb8b040a93f122e4244c67ee2189ee7539e6fb5fe149d089195e9874c"
+}

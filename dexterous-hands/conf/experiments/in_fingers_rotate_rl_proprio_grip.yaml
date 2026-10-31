@@ -1,0 +1,32 @@
+# From-scratch proprioception-only RL with the object made easy to turn.
+#
+# This is a test of the diagnosis rather than a recipe. Six reward configurations have
+# failed, including one with every "hold still" penalty zeroed, which rules out the
+# penalties competing with a weak rotation signal. The remaining explanation is that
+# random exploration from a static grasp almost never produces *net* rotation, so there
+# is no gradient toward a gait at any reward setting.
+#
+# If that is right, making the object grip well should produce rotation where nothing
+# else has: a partial, uncoordinated gait still turns a high-friction object instead of
+# slipping against it. Friction is pinned above the task's sampled range rather than
+# across it -- the task ships (0.15, 1.2), so [2.0, 3.0] is deliberately outside the
+# training distribution, which is the point for a diagnostic but makes any policy trained
+# here unusable as a checkpoint for the shipped task.
+#
+# A positive result makes the curriculum concrete -- train at high friction, then anneal
+# to the full range. A negative result says the blocker is not discovery.
+runner_options:
+  actor:
+    rnn_hidden_dim: 128
+    rnn_num_layers: 1
+    hidden_dims: [256, 128]
+  algorithm:
+    entropy_coef: 0.01
+reward_options:
+  rotation_reward:
+    weight: 5.0
+  is_dropped:
+    weight: -100.0
+event_options:
+  obj_friction:
+    friction_range: [2.0, 3.0]

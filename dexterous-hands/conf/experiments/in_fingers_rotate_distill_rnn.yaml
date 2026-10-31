@@ -1,0 +1,13 @@
+# Proprioception-only recurrent student for `in_fingers_rotate --stage=2`.
+#
+# The student observes `proprio` (joint position, joint velocity, last action) and
+# `goal` only -- no tactile group and no `dofs_force` -- so the recurrence is the
+# only place object state can come from. A single LSTM(128) over the single-step
+# observation is the shape that worked in earlier in-hand rotation runs; a 30-frame history
+# flattened through an MLP encoder scored roughly a quarter as well there, and the
+# 4-layer LSTM(512) default is a lot of parameters for a 51-dim input.
+runner_options:
+  student:
+    rnn_hidden_dim: 128
+    rnn_num_layers: 1
+    hidden_dims: [256, 128]

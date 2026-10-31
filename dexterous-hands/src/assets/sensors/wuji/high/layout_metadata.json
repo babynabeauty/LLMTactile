@@ -1,0 +1,221 @@
+{
+  "hand": "wuji",
+  "profile": "high",
+  "target_count": 512,
+  "active_count": 507,
+  "links": [
+    {
+      "link_name": "r_wrist",
+      "region": "palm",
+      "shape": [
+        15,
+        18
+      ],
+      "count": 270,
+      "radius_m": 0.00666711,
+      "max_coverage_distance_m": 0.006349619245092068,
+      "contact_patch_area_m2": 0.0031183060932138884
+    },
+    {
+      "link_name": "r_thumb_tip_sensor_frame",
+      "region": "thumb",
+      "shape": [
+        5,
+        4
+      ],
+      "count": 20,
+      "radius_m": 0.00260769,
+      "max_coverage_distance_m": 0.002483511800872578,
+      "contact_patch_area_m2": 0.00022241429145557575
+    },
+    {
+      "link_name": "r_thumb_middle",
+      "region": "thumb",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.00268913,
+      "max_coverage_distance_m": 0.0025610701153164165,
+      "contact_patch_area_m2": 0.000186543861955886
+    },
+    {
+      "link_name": "r_thumb_proximal_abd",
+      "region": "thumb",
+      "shape": [
+        3,
+        5
+      ],
+      "count": 15,
+      "radius_m": 0.00253854,
+      "max_coverage_distance_m": 0.0024176510905871773,
+      "contact_patch_area_m2": 0.00014623995641465485
+    },
+    {
+      "link_name": "r_index_finger_tip_sensor_frame",
+      "region": "index",
+      "shape": [
+        3,
+        3
+      ],
+      "count": 9,
+      "radius_m": 0.00266246,
+      "max_coverage_distance_m": 0.002535669130177687,
+      "contact_patch_area_m2": 0.00010357252492858331
+    },
+    {
+      "link_name": "r_index_finger_middle",
+      "region": "index",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.00326578,
+      "max_coverage_distance_m": 0.0031102627152228175,
+      "contact_patch_area_m2": 0.00018016797000866482
+    },
+    {
+      "link_name": "r_index_finger_proximal_abd",
+      "region": "index",
+      "shape": [
+        6,
+        3
+      ],
+      "count": 18,
+      "radius_m": 0.00296009,
+      "max_coverage_distance_m": 0.0028191314780887256,
+      "contact_patch_area_m2": 0.0002492190664561919
+    },
+    {
+      "link_name": "r_middle_finger_tip_sensor_frame",
+      "region": "middle",
+      "shape": [
+        4,
+        3
+      ],
+      "count": 12,
+      "radius_m": 0.0028625,
+      "max_coverage_distance_m": 0.0027261898606450374,
+      "contact_patch_area_m2": 0.00015582390287451406
+    },
+    {
+      "link_name": "r_middle_finger_middle",
+      "region": "middle",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.00333524,
+      "max_coverage_distance_m": 0.0031764129095547436,
+      "contact_patch_area_m2": 0.00018658540922666432
+    },
+    {
+      "link_name": "r_middle_finger_proximal_abd",
+      "region": "middle",
+      "shape": [
+        6,
+        4
+      ],
+      "count": 24,
+      "radius_m": 0.00267002,
+      "max_coverage_distance_m": 0.0025428685956499094,
+      "contact_patch_area_m2": 0.00026366074499118125
+    },
+    {
+      "link_name": "r_ring_finger_tip_sensor_frame",
+      "region": "ring",
+      "shape": [
+        3,
+        3
+      ],
+      "count": 9,
+      "radius_m": 0.00289387,
+      "max_coverage_distance_m": 0.002756065580050402,
+      "contact_patch_area_m2": 0.00011254597043258729
+    },
+    {
+      "link_name": "r_ring_finger_middle",
+      "region": "ring",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.00333524,
+      "max_coverage_distance_m": 0.003176412909554765,
+      "contact_patch_area_m2": 0.00018658540922666432
+    },
+    {
+      "link_name": "r_ring_finger_proximal_abd",
+      "region": "ring",
+      "shape": [
+        6,
+        4
+      ],
+      "count": 24,
+      "radius_m": 0.00267002,
+      "max_coverage_distance_m": 0.0025428685956499094,
+      "contact_patch_area_m2": 0.00026366074499118125
+    },
+    {
+      "link_name": "r_pinky_tip_sensor_frame",
+      "region": "pinky",
+      "shape": [
+        4,
+        3
+      ],
+      "count": 12,
+      "radius_m": 0.00266519,
+      "max_coverage_distance_m": 0.002538271226336354,
+      "contact_patch_area_m2": 0.00013827859904118653
+    },
+    {
+      "link_name": "r_pinky_middle",
+      "region": "pinky",
+      "shape": [
+        5,
+        3
+      ],
+      "count": 15,
+      "radius_m": 0.00335719,
+      "max_coverage_distance_m": 0.003197321730434227,
+      "contact_patch_area_m2": 0.0001792550860415971
+    },
+    {
+      "link_name": "r_pinky_proximal_abd",
+      "region": "pinky",
+      "shape": [
+        5,
+        3
+      ],
+      "count": 15,
+      "radius_m": 0.00281527,
+      "max_coverage_distance_m": 0.0026812054166978337,
+      "contact_patch_area_m2": 0.00019406804261658478
+    }
+  ],
+  "coverage": "Palm and finger contact patches; excludes dorsal surfaces and joint gaps",
+  "radius_note": "1.05 times maximum sampled patch-to-nearest-probe distance, including boundaries",
+  "source_layout_sha256": "ddfe9e77de3d19fd9d185b5c963b808e0fbf00e740d9c7d0365891d9fc58015f",
+  "source_geometry": {
+    "r_wrist": "748cf6a16bc5bfedf9c7e2ee489459f726740680db1449221133be570f9ee505",
+    "r_thumb_tip_sensor_frame": "7a94ebdd1c50ec5b62e73abd51848fe15589d9eb07e2fa3b1eab6567e5f08c12",
+    "r_thumb_middle": "a3e9851cd3aed770fb0ed2b05b2ceca86980af1bfef2fbc8e1925e9a6110f56f",
+    "r_thumb_proximal_abd": "d9e28b15b054ede554f23524c32f430fefa3622eb9fa10016c39fec10a2638e8",
+    "r_index_finger_tip_sensor_frame": "4142c661bbe09bcbbee8c6188676915986bcdcc49f397720252864148665da37",
+    "r_index_finger_middle": "2e1dd153fb0725aa3caed4dd49cb918da0378e875c4b9442bd147793a111f7d7",
+    "r_index_finger_proximal_abd": "f1ff36b8d54ce2bf93f42424da9392df6568dc1b286ff588157fe6030797f1f6",
+    "r_middle_finger_tip_sensor_frame": "4142c661bbe09bcbbee8c6188676915986bcdcc49f397720252864148665da37",
+    "r_middle_finger_middle": "8f7234c6ef133c11ecea89e3d1a94f4842dec9099c53faccd9312115d86fed4d",
+    "r_middle_finger_proximal_abd": "483d9af13da2a605263cf27cbbc789f2dfcd571cb0a37b54c9322e5705c7ada9",
+    "r_ring_finger_tip_sensor_frame": "4142c661bbe09bcbbee8c6188676915986bcdcc49f397720252864148665da37",
+    "r_ring_finger_middle": "9069d35b6f34fe23b49a7b28f8ef2dfd36ee18bebcf72de039e550f38d6a36cb",
+    "r_ring_finger_proximal_abd": "bfc1ac8e3324942ecfd2dae448b925db3bf668a03b3aaa36a050aef1d8734d40",
+    "r_pinky_tip_sensor_frame": "b9c9df3fee37dd4f30072c15b65bd1019c4cea1b90dbba9b082eb05b6678d561",
+    "r_pinky_middle": "12466b870cf8cc47aacdc02a535474d65bce3bf128840a8e471c4fede43d57ee",
+    "r_pinky_proximal_abd": "321e9e615166eab4cd87ad4bc8609a7c19944fd7200f957d11bb020fa255bb72"
+  }
+}

@@ -1,0 +1,6 @@
+# Flip screwdriver reward direction for right-hand A/B test.
+env_options:
+  num_envs: 1024
+
+runner_options:
+  max_iterations: 4000

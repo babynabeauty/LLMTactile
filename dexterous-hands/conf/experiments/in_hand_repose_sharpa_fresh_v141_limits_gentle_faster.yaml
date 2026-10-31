@@ -1,0 +1,195 @@
+# Faster v1.4.1 successor; fresh initialization, bounded smooth targets.
+# Fresh successor: soft DOF-limit penalty and half-force probe; never resume F141 policies.
+env_options:
+  num_envs: 8192
+runner_options:
+  max_iterations: 6000
+  save_interval: 500
+  actor:
+    distribution_cfg:
+      init_std: 0.3
+  seed: 42
+  algorithm:
+    entropy_coef: 0.002
+  obs_groups:
+    critic:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - perturbation
+    student:
+    - proprio
+    - goal
+    teacher:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - controller
+    - perturbation
+    rnd_state:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    actor:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - controller
+    - perturbation
+action_options:
+  dofs_pos_controller:
+    name: smooth_pd_controller
+    entity_name: robot
+    dofs_name:
+    - '*'
+    scale_ratio: 0.5
+    reference_source: default
+    observation_version: smooth_teacher_v1
+    offset: 0.0
+    limit_targets: true
+    max_target_velocity: 1.0
+    scale: 1.0
+    max_target_acceleration: 10.0
+    ema_alpha: 0.7
+    modifier: null
+    _option_module_: eden.options.managers.actions
+    _option_class_: ActionTermOptions
+reward_options:
+  success_bonus:
+    name: settled_goal_completion
+    weight: 20.0
+    params:
+      command_name: goal_rot
+  action_rate_penalty:
+    weight: -0.005
+  work_penalty:
+    weight: 0.0
+  track_orientation_inv_l2:
+    weight: 0.2
+    params:
+      command_name: goal_rot
+      rot_eps: 0.1
+  track_orientation_gaussian:
+    weight: 0.0
+  rotation_progress:
+    weight: 0.0
+  obj_force_penalty:
+    weight: 0.0
+  goal_timeout_penalty:
+    weight: 0.0
+  surface_distance_reward:
+    weight: 0.0
+  joint_limits_penalty:
+    name: repose_joint_limit_margin_penalty
+    weight: -0.04
+    params:
+      entity_name: robot
+      margin: 0.1
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  default_pose_penalty:
+    name: default_pose_l1_penalty
+    weight: -0.04
+    params:
+      entity_name: robot
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  is_dropped:
+    weight: -100.0
+scene_options:
+  robot:
+    default_dofs_pos:
+      right_thumb_CMC_FE: 0.5
+      right_thumb_MCP_FE: 0.5
+      right_thumb_IP: 0.5
+      right_index_MCP_FE: 0.5
+      right_index_PIP: 0.5
+      right_index_DIP: 0.5
+      right_middle_MCP_FE: 0.5
+      right_middle_PIP: 0.5
+      right_middle_DIP: 0.5
+      right_ring_MCP_FE: 0.5
+      right_ring_PIP: 0.5
+      right_ring_DIP: 0.5
+      right_pinky_MCP_FE: 0.5
+      right_pinky_PIP: 0.5
+      right_pinky_DIP: 0.5
+observation_options:
+  controller:
+    state:
+      name: controller_state
+      noise: null
+      clip: null
+      scale: 1.0
+      history_length: 0
+      flatten_history_dim: false
+      backfill: true
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+  perturbation:
+    perturbation_active:
+      name: perturbation_active
+      noise: null
+      clip: null
+      scale: 1.0
+      history_length: 0
+      flatten_history_dim: false
+      backfill: true
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+event_options:
+  object_pulse:
+    profile: probe
+    name: object_wrench_pulse
+    mode: interval
+    interval_range_s:
+    - 0.025
+    - 0.025
+    is_global_time: false
+    min_step_count_between_reset: 0
+    priority: 0
+    strength: 0.25
+    entity_name: obj
+    draw_envs: []
+    clean_fraction: 0.25
+    _option_module_: eden.options.managers.events
+    _option_class_: EventTermOptions
+    probe_wrench_scale: 0.5
+command_options:
+  goal_rot:
+    name: reachable_settled_target_rotation_command
+    settle_time: 0.25
+    max_success_angular_speed: 0.25
+    min_angle: 0.5
+    max_angle: 0.5
+    resampling_time_range:
+    - 6.0
+    - 8.0
+metric_options:
+  joint_velocity:
+    name: smooth_motion_metric
+    quantity: joint_velocity
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  joint_acceleration:
+    name: smooth_motion_metric
+    quantity: joint_acceleration
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  target_velocity:
+    name: smooth_motion_metric
+    quantity: target_velocity
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  action_saturation:
+    name: smooth_motion_metric
+    quantity: action_saturation
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions

@@ -1,0 +1,16 @@
+# Stage-3 RL for a tactile student, warm-started from its distilled counterpart.
+#
+# Same two adjustments as the proprioceptive stage-3 config, and for the same reason: stage 3
+# does not load the actor's action distribution, so a warm-started policy starts with a fresh
+# Gaussian at init_std 1.0 -- roughly a full 1/24 rad increment of noise on every joint every
+# step. Without the entropy bonus off and the drop margin loosened, every episode terminates
+# before PPO gets a gradient.
+#
+# No `runner_options.actor` block here: the tactile students use `tac_mlp`, whose actor options
+# are a different class from the recurrent one the proprioceptive config sizes.
+runner_options:
+  algorithm:
+    entropy_coef: 0.0
+termination_options:
+  obj_dropped:
+    margin: 0.05

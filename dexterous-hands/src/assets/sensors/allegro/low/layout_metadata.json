@@ -1,0 +1,228 @@
+{
+  "hand": "allegro",
+  "profile": "low",
+  "target_count": 128,
+  "active_count": 140,
+  "links": [
+    {
+      "link_name": "ahr_palm_1_4x6_palm_link",
+      "region": "palm",
+      "shape": [
+        2,
+        4
+      ],
+      "count": 8,
+      "radius_m": 0.00737883,
+      "max_coverage_distance_m": 0.007027449196750904,
+      "contact_patch_area_m2": 0.0007785744511760713
+    },
+    {
+      "link_name": "ahr_palm_2_4x6_palm_link",
+      "region": "palm",
+      "shape": [
+        2,
+        4
+      ],
+      "count": 8,
+      "radius_m": 0.00737883,
+      "max_coverage_distance_m": 0.007027449196750904,
+      "contact_patch_area_m2": 0.0007785744511760713
+    },
+    {
+      "link_name": "ahr_palm_3_4x6_palm_link",
+      "region": "palm",
+      "shape": [
+        2,
+        4
+      ],
+      "count": 8,
+      "radius_m": 0.00737883,
+      "max_coverage_distance_m": 0.007027449196750904,
+      "contact_patch_area_m2": 0.0007785744511760713
+    },
+    {
+      "link_name": "index_1A_4x4_palm_link",
+      "region": "index",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "index_1B_4x4_palm_link",
+      "region": "index",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "index_2_4x4_palm_link",
+      "region": "index",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "index_3_tip",
+      "region": "index",
+      "shape": [
+        3,
+        6
+      ],
+      "count": 18,
+      "radius_m": 0.0086042,
+      "max_coverage_distance_m": 0.008194468788206509,
+      "contact_patch_area_m2": 0.001510552984641001
+    },
+    {
+      "link_name": "middle_1A_4x4_palm_link",
+      "region": "middle",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "middle_1B_4x4_palm_link",
+      "region": "middle",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "middle_2_4x4_palm_link",
+      "region": "middle",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "middle_3_tip",
+      "region": "middle",
+      "shape": [
+        3,
+        6
+      ],
+      "count": 18,
+      "radius_m": 0.0086042,
+      "max_coverage_distance_m": 0.008194468788206509,
+      "contact_patch_area_m2": 0.001510552984641001
+    },
+    {
+      "link_name": "ring_1A_4x4_palm_link",
+      "region": "ring",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "ring_1B_4x4_palm_link",
+      "region": "ring",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "ring_2_4x4_palm_link",
+      "region": "ring",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "ring_3_tip",
+      "region": "ring",
+      "shape": [
+        3,
+        6
+      ],
+      "count": 18,
+      "radius_m": 0.0086042,
+      "max_coverage_distance_m": 0.008194468788206509,
+      "contact_patch_area_m2": 0.001510552984641001
+    },
+    {
+      "link_name": "thumb_2_4x4_palm_link",
+      "region": "thumb",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "thumb_3_4x4_palm_link",
+      "region": "thumb",
+      "shape": [
+        2,
+        2
+      ],
+      "count": 4,
+      "radius_m": 0.00519822,
+      "max_coverage_distance_m": 0.004950676478378707,
+      "contact_patch_area_m2": 0.00019599706001212494
+    },
+    {
+      "link_name": "thumb_3_tip",
+      "region": "thumb",
+      "shape": [
+        3,
+        6
+      ],
+      "count": 18,
+      "radius_m": 0.0086042,
+      "max_coverage_distance_m": 0.008194468788206509,
+      "contact_patch_area_m2": 0.001510552984641001
+    }
+  ],
+  "coverage": "Palm and finger contact patches; excludes dorsal surfaces and joint gaps",
+  "radius_note": "1.05 times maximum sampled patch-to-nearest-probe distance, including boundaries",
+  "source_layout_sha256": "2c7d5b8c3cd99d60afeefd1d71f1ba15e735574ff2d8ac8cd55049d6d4f9010b",
+  "source_geometry": {}
+}

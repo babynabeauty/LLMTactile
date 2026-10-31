@@ -1,0 +1,3 @@
+# Optional IPC soft-body profile; install into the existing Genesis environment.
+pyuipc==0.0.29
+polyscope==2.6.1

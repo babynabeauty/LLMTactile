@@ -1,0 +1,72 @@
+# Grasp sampling config for Allegro + in_fingers_rotate (HORA-style palm-up rotation).
+#
+# The seed joint pose is HORA's `canonical_pose` from `hora/tasks/allegro_hand_grasp.py`,
+# grouped as [index, thumb, middle, ring] x [roll, bend0, bend1, bend2]. HORA clamps
+# the pose to the joint limits after perturbing it, so its raw array does not have to
+# be feasible and the joint order cannot be recovered from the limits alone. This
+# grouping is the one that measures as a grasp in sim: it closes 2.7 of 4 fingertips
+# onto the object on average, against 0.6 for the alternatives.
+#
+# Bend joints are closed 0.15 rad from HORA's canonical pose, because the object set
+# was shrunk to 4.4-5.6 cm and the canonical grasp is sized for 6.4 cm.
+#
+# Acceptance mirrors HORA's three checks: fingertips near the object, no deep
+# penetration, and the object still held after the scene settles.
+grasp_generation:
+  num_envs: 4096
+  # Per object variant, not in total: OBJECTS_HORA_MIXED_11 has 11 of them. Spheres and
+  # cylinders are harder to hold in a palm-up cradle than blocks, so the sampler is
+  # allowed to stop short on the difficult ones rather than spin forever -- see
+  # --stall_iters / --min_grasps, and the shortfall report it prints on exit.
+  num_grasps: 128
+  min_grasps: 40
+  # HORA perturbs the canonical pose by +-0.25 rad uniform.
+  perturb_range: 0.25
+  # HORA seeds the object at a fixed pose with identity rotation. Yaw about the
+  # task axis is a symmetry of the task, so spanning it costs nothing and gives the
+  # policy grasps at every relative orientation.
+  obj_pos_shift: "-0.01,0.01,-0.01,0.01,0.0,0.005"
+  obj_euler_range: "0,0,0,0,-180,180"
+  # Condition 1: fingertips actually on the object. HORA wants all four tips within
+  # 0.1 m and at least two in contact; 3 of 4 within 15 mm is the nearest equivalent
+  # expressible with surface-distance probes.
+  required_num_surface_distance_fingers: 3
+  surface_distance_threshold: 0.015
+  # Condition 2: reject deep penetration.
+  max_penetration: 0.003
+  # Condition 3: the object is still held after the grasp has had time to fail.
+  # HORA's cache keeps only states from envs that survived a full 400-step zero-action
+  # episode. At 200 Hz these are sim steps, so 1000 is 5 s of holding under the real
+  # gains -- with 20 the sampler accepted grasps that sag out of the hand a second
+  # later, and every env dropped inside one episode with no action applied at all.
+  stability_steps: 1000
+  max_displacement: 0.015
+  save_object_pose: true
+  output_file: src/assets/grasps/in_fingers_rotate_allegro_small_grasps_128.pt
+
+scene_options:
+  robot:
+    # 0.15 m below the object, palm up, fingers along world -y. Matches
+    # HAND_OFFSETS/HAND_EULERS["allegro"] in the task config.
+    default_root_pos: [0.0, 0.0, 0.35]
+    default_root_quat: [0.5, 0.5, -0.5, 0.5]
+    default_dofs_pos:
+      index_roll: 0.082000
+      index_bend0: 1.394000
+      index_bend1: 0.415000
+      index_bend2: 0.448000
+      thumb_bend0: 1.254000
+      thumb_roll: 1.163000
+      thumb_bend1: 1.103000
+      thumb_bend2: 0.012000
+      middle_roll: 0.005000
+      middle_bend0: 1.246000
+      middle_bend1: 0.230000
+      middle_bend2: 0.300000
+      ring_roll: 0.029000
+      ring_bend0: 1.487000
+      ring_bend1: 0.435000
+      ring_bend2: 0.467000
+  obj:
+    default_root_pos: [0.0, 0.0, 0.5]
+    default_root_quat: [1.0, 0.0, 0.0, 0.0]

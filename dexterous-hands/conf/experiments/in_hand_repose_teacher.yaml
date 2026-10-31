@@ -1,0 +1,21 @@
+env_options:
+  num_envs: 8192
+
+runner_options:
+  max_iterations: 20000
+  save_interval: 500
+  actor:
+    distribution_cfg:
+      init_std: 0.5
+
+# `scale_ratio` sets `scale = scale_ratio * (upper - lower)` per DOF, so the task default of 0.5
+# maps one unit of action onto half of each joint's full travel: a mean of 1.224 rad on wuji,
+# 1.571 on the PIP joints, commanded fresh every 25 ms. 0.125 brings that to a mean 0.306 rad.
+# See CHANGELOG.md.
+action_options:
+  dofs_pos_controller:
+    scale_ratio: 0.125
+
+reward_options:
+  action_rate_penalty:
+    weight: -1.0e-3

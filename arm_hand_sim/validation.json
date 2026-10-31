@@ -1,0 +1,15 @@
+{
+  "joint_count": 27,
+  "paused_time_and_rejected_commands": "pass",
+  "stable_control_steps": 200,
+  "arm_wrist_motion_m": 0.013211309909820557,
+  "hand_max_joint_motion_rad": 0.6673916652798653,
+  "contact_active_taxels": 2,
+  "full_tactile_shape": [
+    140,
+    6
+  ],
+  "two_camera_jpegs": "pass",
+  "result": "pass",
+  "scope": "Integration and physical contact checks; not grasp success evaluation or hardware calibration."
+}

@@ -1,0 +1,437 @@
+# Fresh single-phase v1.4.1 teacher; L15 design, no checkpoint initialization.
+observation_options:
+  controller:
+    state:
+      name: controller_state
+      noise: null
+      clip: null
+      scale: 1.0
+      history_length: 0
+      flatten_history_dim: false
+      backfill: true
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+  perturbation:
+    perturbation_active:
+      name: perturbation_active
+      noise: null
+      clip: null
+      scale: 1.0
+      history_length: 0
+      flatten_history_dim: false
+      backfill: true
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+  root_controller:
+    state:
+      name: root_controller_state
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+event_options:
+  object_pulse:
+    profile: probe
+    name: object_wrench_pulse
+    mode: interval
+    interval_range_s:
+    - 0.025
+    - 0.025
+    is_global_time: false
+    min_step_count_between_reset: 0
+    priority: 0
+    strength: 0.25
+    only_lifted_above_m: 0.05
+    entity_name: obj
+    draw_envs: []
+    clean_fraction: 0.25
+    _option_module_: eden.options.managers.events
+    _option_class_: EventTermOptions
+metric_options:
+  joint_velocity:
+    name: smooth_motion_metric
+    quantity: joint_velocity
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  joint_acceleration:
+    name: smooth_motion_metric
+    quantity: joint_acceleration
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  target_velocity:
+    name: smooth_motion_metric
+    quantity: target_velocity
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  action_saturation:
+    name: smooth_motion_metric
+    quantity: action_saturation
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+env_options:
+  num_envs: 4096
+  episode_length_s: 20.0
+runner_options:
+  max_iterations: 5000
+  save_interval: 500
+  seed: 42
+  actor:
+    distribution_cfg:
+      init_std: 0.3
+  algorithm:
+    entropy_coef: 0.0002
+  obs_groups:
+    actor:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - root_controller
+    - perturbation
+    teacher:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - root_controller
+    - perturbation
+    critic:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - root_controller
+    - perturbation
+action_options:
+  dofs_pos_controller:
+    name: smooth_pd_controller
+    entity_name: robot
+    dofs_name:
+    - '*'
+    scale_ratio: 0.5
+    reference_source: default
+    observation_version: smooth_teacher_v1
+    offset: 0.0
+    limit_targets: true
+    max_target_velocity: 0.8
+    scale: 1.0
+    max_target_acceleration: 8.0
+    ema_alpha: 0.8
+    modifier: null
+    _option_module_: eden.options.managers.actions
+    _option_class_: ActionTermOptions
+  ee_controller:
+    name: smooth_root_pose_controller
+    euler_x_range:
+    - -45.0
+    - 45.0
+    euler_y_range:
+    - -45.0
+    - 45.0
+    euler_z_range:
+    - -45.0
+    - 45.0
+    linear_acceleration_limit: 0.5
+    angular_acceleration_limit: 4.0
+    pos_z_range:
+    - 0.48
+    - 1.0
+reward_options:
+  action_rate_penalty:
+    weight: -0.005
+  goal_tracking:
+    name: goal_tracking_reward
+    weight: 1.0
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+    sigma_far: 0.25
+  settled_carry:
+    name: settled_carry_bonus
+    weight: 2.0
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  lift:
+    name: sustained_lift_reward
+  natural_motion:
+    name: palm_down_penalty
+    weight: -0.5
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  centre_rise:
+    name: centre_rise_reward
+    weight: 1.0
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+scene_options:
+  robot:
+    default_dofs_kp:
+      '*': 5.0
+    default_dofs_kd:
+      '*': 0.05
+    default_root_pos:
+    - 0.0
+    - 0.0
+    - 0.7
+  obj:
+    grouped_entities:
+    - size:
+      - 0.072
+      - 0.08
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.084
+      - 0.084
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.07
+      - 0.07
+      - 0.07
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.08
+      - 0.08
+      - 0.08
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.09
+      - 0.09
+      - 0.09
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.084
+      - 0.084
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.068
+      - 0.07
+      - 0.08
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.062
+      - 0.076
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.076
+      - 0.09
+      - 0.082
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.078
+      - 0.066
+      - 0.088
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.082
+      - 0.074
+      - 0.06
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.084
+      - 0.068
+      - 0.086
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.086
+      - 0.078
+      - 0.07
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.08
+      - 0.082
+      - 0.072
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - size:
+      - 0.088
+      - 0.078
+      - 0.07
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+    - radius: 0.04
+      height: 0.084
+      _option_module_: eden.options.entities
+      _option_class_: CylinderOptions
+    - radius: 0.034
+      height: 0.076
+      _option_module_: eden.options.entities
+      _option_class_: CylinderOptions
+  vis_obj:
+    grouped_entities:
+    - size:
+      - 0.072
+      - 0.08
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.084
+      - 0.084
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.07
+      - 0.07
+      - 0.07
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.08
+      - 0.08
+      - 0.08
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.09
+      - 0.09
+      - 0.09
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.084
+      - 0.084
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.068
+      - 0.07
+      - 0.08
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.062
+      - 0.076
+      - 0.084
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.076
+      - 0.09
+      - 0.082
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.078
+      - 0.066
+      - 0.088
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.082
+      - 0.074
+      - 0.06
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.084
+      - 0.068
+      - 0.086
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.086
+      - 0.078
+      - 0.07
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.08
+      - 0.082
+      - 0.072
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - size:
+      - 0.088
+      - 0.078
+      - 0.07
+      _option_module_: eden.options.entities
+      _option_class_: BoxOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - radius: 0.04
+      height: 0.084
+      _option_module_: eden.options.entities
+      _option_class_: CylinderOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+    - radius: 0.034
+      height: 0.076
+      _option_module_: eden.options.entities
+      _option_class_: CylinderOptions
+      collision: false
+      is_fixed_base: true
+      fixed: true
+command_options:
+  goal_pos:
+    z_range:
+    - 0.65
+    - 0.75

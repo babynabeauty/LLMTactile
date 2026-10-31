@@ -1,0 +1,95 @@
+# Sharpa teacher for in_hand_repose. Shares the action-space and penalty settings of
+# in_hand_repose_teacher.yaml; adds the cradling default pose. See CHANGELOG.md.
+env_options:
+  num_envs: 8192
+
+runner_options:
+  max_iterations: 20000
+  save_interval: 500
+  actor:
+    distribution_cfg:
+      init_std: 0.5
+
+# Smoothness structurally rather than by penalty. A reward penalty prices oscillation; a
+# first-order filter on the position target makes a step-to-step reversal unrepresentable.
+# mjlab_hand runs its rotation task at alpha 0.8 with an action-rate penalty of only -1e-6. At
+# 40 Hz control, alpha 0.8 reaches 95% of a step change in about 13 steps (0.34 s). The rest of
+# the chain is restated because the override replaces the list rather than merging into it.
+action_options:
+  dofs_pos_controller:
+    scale_ratio: 0.125
+    modifier:
+      modifiers:
+        - name: constant_torque_kick
+          _option_module_: eden.options.managers.modifiers
+          _option_class_: ActionModifierOptions
+        - name: motor_strength
+          _option_module_: eden.options.managers.modifiers
+          _option_class_: ActionModifierOptions
+        - name: torque_offset
+          _option_module_: eden.options.managers.modifiers
+          _option_class_: ActionModifierOptions
+        - name: gear_backlash
+          _option_module_: eden.options.managers.modifiers
+          _option_class_: ActionModifierOptions
+        - name: deadband
+          _option_module_: eden.options.managers.modifiers
+          _option_class_: ActionModifierOptions
+        - name: ema_smoothing
+          alpha: 0.8
+          _option_module_: eden.options.managers.modifiers
+          _option_class_: ActionModifierOptions
+# Naturalness. Weights are sized from the raw per-episode magnitudes the previous run measured at
+# ~3600 iterations, where `success_bonus` sat at +75 and `track_orientation_inv_l2` at +5.6:
+#   - action_rate: raw 147 (wuji) / 174 (sharpa), so -5e-3 gives about -0.8.
+#   - work: raw 4.1 on both, so -1e-1 gives about -0.4.
+#   - tracking halved to 1.0, so the naturalness terms are not competing with a runaway signal.
+#   - `similar_to_default` is an L1 pull back toward `default_dofs_pos`, which is the cradle pose
+#     set below, so the regulariser and the reset pose are the same target by construction. Raw
+#     came out at 10.1 (wuji) / 6.1 (sharpa), so -4e-2 gives -0.41 and -0.25. The first estimate
+#     was -5e-4, which measured -0.005 and did nothing.
+# `success_bonus` was 69% (wuji) / 81% (sharpa) of total reward magnitude at ~1000 iterations --
+# weight 500 against a raw rate that only grows as the policy improves, so its share compounds.
+# Every smoothness term together came to about 4%, which is why raising them twice barely moved
+# the jitter. 100 puts it near the tracking term instead of ten times it, which is the ratio
+# mjlab_hand runs (`rot_rew` 0.02 against `reach_goal_bonus` 0.01).
+reward_options:
+  success_bonus:
+    weight: 100.0
+  action_rate_penalty:
+    weight: -5.0e-3
+  work_penalty:
+    weight: -1.0e-1
+  track_orientation_inv_l2:
+    weight: 1.0
+  pose_regularization:
+    name: similar_to_default
+    params:
+      entity_name: robot
+    weight: -4.0e-2
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+
+# The controller's reference is `default_dofs_pos` (ReferenceSource.DEFAULT), so this pose is
+# where action 0 sits. Flat and open, the policy had to hold a large sustained action just to
+# touch the object, and its exploration noise rode on top of that. Curled, one of five
+# fingertips start within 2 cm of the cube (mean 0.024 m, against 0.108 m flat) and the object
+# is cradled rather than resting on a flat palm.
+scene_options:
+  robot:
+    default_dofs_pos:
+      right_thumb_CMC_FE: 0.8
+      right_thumb_MCP_FE: 0.8
+      right_thumb_IP: 0.8
+      right_index_MCP_FE: 0.8
+      right_index_PIP: 0.8
+      right_index_DIP: 0.8
+      right_middle_MCP_FE: 0.8
+      right_middle_PIP: 0.8
+      right_middle_DIP: 0.8
+      right_ring_MCP_FE: 0.8
+      right_ring_PIP: 0.8
+      right_ring_DIP: 0.8
+      right_pinky_MCP_FE: 0.8
+      right_pinky_PIP: 0.8
+      right_pinky_DIP: 0.8

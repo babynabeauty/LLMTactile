@@ -1,0 +1,320 @@
+seed: 1
+train_seed: 1
+test_seed: 1
+
+environment:
+  hardware:
+    kinematic_type: "simfk"
+    arm_type: "ur5"                
+    hand_type: "xhand"
+    real_world_mode: False          
+    # Enables hand-only mode without the arm
+    flying_hand_mode: False
+    # Option to save simulation states
+    save_state_mode: False
+    # Resource model identifier
+    rsc_model: "ur5_xhand"
+    # Simulation model path reference - rsc/${rsc_model}/${sim_model}.urdf
+    sim_model: "ur5_xhand_teacher_tactile"
+
+    # Collision group ID for visualization in RaiSim
+    vis_group_id: "0"
+    # Collision mask IDs - 2:table, 63:all objects
+    vis_mask_id:  "0,1,2,63"
+    # PD controller parameters file for the arm
+    arm_pd_file: "UR5Identification_id5hz.txt" # path in ./raisimGymTorch/env/hardware/arm/UR5Identification_id5hz.txt
+    # PD controller parameters file for the hand
+    hand_pd_file: "Xhandtemp.txt" # path in ./raisimGymTorch/env/hardware/hand/Allegrotemp.txt
+    # Initial joint positions for the 16 finger joints [rad]
+    init_finger_pose: [1.5, -0.5, 0.2, 0.08, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5]
+    # Friction coefficient of the table surface
+    table_friction: 0.2
+    # Grasping frame position in hand frame
+    hand_center: [-0.025, 0.0, -0.07]
+
+    # Random friction values to sample from during domain randomization
+    randomize_friction: "0.5,0.6,0.7,0.8,0.9"
+    # Domain randomization parameters below
+    # Noise is added in range [-value, +value] and 0.0 means no randomization
+    
+    # PD controller gain randomization ratios (percentage of original value)
+    randomize_gains_hand_p: 0.2     # Hand proportional gain randomization (±10%)
+    randomize_gains_hand_d: 0.2     # Hand derivative gain randomization (±10%)
+    randomize_gains_arm_p: 0.1     # Arm proportional gain randomization (±5%)
+    randomize_gains_arm_d: 0.1     # Arm derivative gain randomization (±5%)
+    
+    # State randomization values
+    randomize_gc_hand: 0.02         # Hand generalized coordinates randomization [rad]
+    randomize_gc_arm: 0.005         # Arm generalized coordinates randomization [rad]
+    randomize_frame_position: 0.01  # Position frame randomization [m]
+    randomize_frame_orientation: 0.02 # Orientation frame randomization [rad]
+
+  # Enable domain randomization during evaluation
+  randomization_eval: False
+  # Enable biased point cloud observation
+  biased: False
+  # Number of steps for grasp sequence
+  grasp_steps: 70
+  # Manual arm joint target used by eval lift phase while hand joints are frozen.
+  manual_lift_arm_q: [1.57, -1.57, 1.57, -1.57, -1.57, -0.785]
+  # Use top-down grasping
+  top: True
+  # Match teacher manual 48D affordance vectors: nearest object point vectors in world frame.
+  manual_affordance_frame: world
+  # Run evaluation during training
+  eval_during_training: False
+  # Use non-uniform sampling for object positions during training
+  non_uniform_sampling: True  
+  # Camera position 
+  camera_position: [-0.6283084128129911, -0.8683926678556529, 1.683178987377321]
+  # Enable curriculum learning
+  curriculum: True
+  # Number of samples of palm direction
+  sample_num: 40
+  # Coefficients for scoring pre-grasp pose quality
+  length_score_coeff: 10
+  angle_score_coeff: 1
+
+  # Save checkpoint frequency
+  eval_every_n: 100
+  # Policy update frequency (every n iterations)
+  update_every_n: 20
+  # Number of parallel simulation threads
+  num_threads: 14
+  # Simulation time step [s]
+  simulation_dt: 0.005
+  # Control time step [s] (policy decision frequency)
+  control_dt: 0.1
+  # Maximum episode duration [s]
+  max_time: 4.0
+  # Enable visualization
+  render: True
+  visualize: False
+  # Dataset to load for training
+  load_set: "new_training_set"
+  # Standard deviation for finger action sampling
+  finger_action_std: 0.015
+  # Standard deviation for arm action sampling
+  rot_action_std: 0.005
+
+  # Student 触觉 PointNet 输入使用 tanh(force_world / tactile_force_norm_scale) 做力归一化。
+  tactile_force_norm_scale: 10.0
+  tactile_force_mag_norm_scale: 10.0
+  tactile_xyz_norm_scale: 0.15
+  tactile_contact_threshold: 0.05
+  # Voxel size used before FPS when fusing external+wrist visual candidates.
+  pointcloud_voxel_size: 0.005
+
+  # Student 多源 PointNet 中视觉点云使用 Raisim rayTest 近似实时 depth 点云。
+  # occlusion_mode=object_only_with_hand_occlusion:
+  # 每条相机 ray 对物体和灵巧手做最近命中；手挡在前面时该 ray 无效，
+  # 未遮挡处只输出物体表面点。
+  # policy 实际接收的是 Raisim world frame 下的原始 xyz。
+  realtime_obj_pc:
+    # True：使用实时 external + wrist 可见物体点云。
+    # False：回退到旧的固定可见点云路径。
+    enabled: True
+    # mixed_nearest: 输出 hand/object 最近可见点，由 keep_non_object_hits 控制是否保留手点。
+    # object_only_with_hand_occlusion: hand 只参与遮挡，输出仍只保留 object 点。
+    occlusion_mode: object_only_with_hand_occlusion
+    keep_non_object_hits: False
+    visualize_visible_points: False
+    visualize_open3d: False
+    visualize_point_radius: 0.006
+    visualize_interval: 1
+
+    # 腕部相机在 hand/wrist frame 下的外参，默认复制自 xhand_real 的腕部相机标定。
+    # 单位：平移为米，旋转为弧度。
+    # 表示相机原点在 hand frame 下的位置。
+    hand_to_camera_translation: [0.05829646, 0.0, -0.03219188]
+    # xyz Euler 旋转；用于构造 camera frame 到 hand frame 的旋转矩阵。
+    # 在 camera frame 中，+Z 是光轴/深度方向。
+    hand_to_camera_rotation_rpy: [-0.70135898, -0.00763943, -1.54902039]
+
+    # ray-depth 相机视锥默认参数。
+    # 点在 camera frame 中满足 0 < z，并且：
+    # abs(x) <= z * tan(fov_x_deg / 2)，abs(y) <= z * tan(fov_y_deg / 2)，则认为落在 FOV 内。
+    fov_x_deg: 70.0
+    fov_y_deg: 55.0
+    # camera frame 下的深度裁剪范围，单位米。
+    near: 0.02
+    far: 0.60
+
+    # 旧固定可见点云路径使用的缓存参数；realtime_obj_pc.enabled=True 时不走该路径。
+    # 数值越大，可见性更平滑，但每步 GPU 计算量也越大。
+    num_dense_points: 2048
+    # 旧固定可见点云路径使用的固定点数。
+    # 如果可见点少于该数量，会从可见点中有放回采样。
+    # 如果没有任何可见点，则输入全 0，visible_count 为 0。
+    num_output_points: 200
+
+    # 表面法线可见性阈值：
+    # 当 dot(normal_world, point_to_camera_dir_world) > threshold 时保留该点。
+    # 数值越低越宽松；-0.1 会允许一部分掠射角表面。
+    normal_facing_threshold: -0.1
+    # 训练时添加到可见物体点云 xyz 上的高斯噪声，单位米。
+    # visual_eval 中会用 noise_std=0 生成点云，以便确定性显示。
+    noise_std: 0.003
+    external:
+      enabled: True
+      # Raw candidate count before fused visual voxel/FPS sampling.
+      output_points: 400
+      width: 96
+      height: 72
+      # Match real external camera 1 depth intrinsics FOV while keeping a low ray grid.
+      fov_x_deg: 79.06
+      fov_y_deg: 63.51
+      near: 0.02
+      far: 1.20
+      collision_mask: hand,object
+      ignore_near_hits: False
+      # Real external camera 1 / front T_base_color from verified_camera_parameters(1).json,
+      # converted from robot base_link to Raisim world with x/y flipped and z shifted by +0.9 m.
+      position: [-0.6283084128129911, -0.8683926678556529, 1.683178987377321]
+      quaternion_xyzw: [0.8794966848578588, -0.155225258676812, 0.08000861657215297, -0.44270681231144743]
+      # Fallback for older builds that only support look_at; direction is camera optical +Z.
+      look_at: [-0.35013522782438433, -0.11451303667940882, 1.0879603881628268]
+    external_2:
+      enabled: True
+      # Real external camera 2 / left T_base_color from verified_camera_parameters(1).json,
+      # converted from robot base_link to Raisim world with x/y flipped and z shifted by +0.9 m.
+      output_points: 400
+      width: 96
+      height: 72
+      fov_x_deg: 78.80
+      fov_y_deg: 63.27
+      near: 0.02
+      far: 1.20
+      collision_mask: hand,object
+      ignore_near_hits: False
+      position: [0.08527090340184479, -0.5182037571409527, 1.5274463554969547]
+      quaternion_xyzw: [-0.7199052332907304, -0.5066388357325423, 0.3058579524469988, 0.3626354341940711]
+      look_at: [-0.7225569661694171, -0.30599649728959, 0.9775534459133407]
+    wrist:
+      enabled: True
+      # Raw candidate count before fused visual voxel/FPS sampling.
+      output_points: 400
+      width: 80
+      height: 60
+      # Match real wrist D405 depth intrinsics FOV while keeping a low ray grid.
+      fov_x_deg: 89.62
+      fov_y_deg: 58.70
+      near: 0.03
+      far: 0.60
+      collision_mask: hand,object
+      ignore_near_hits: True
+
+  # Student 使用 DexPoint 风格的单个 PointNet 处理统一多源点云。
+  # 点特征顺序和 teacher 对齐：
+  # [x, y, z, Fx, Fy, Fz, onehot_object, onehot_tactile]
+  # 视觉点的 force 固定为 0；触觉点的 xyz/force 从 palm frame 转到 Raisim world frame。
+  multi_source_point_cloud:
+    # 输入 PointNet 的总点数。
+    total_points: 1000
+    # Fused visual PointNet slots are external_points + wrist_points.
+    # After fusion, external/wrist visual points share onehot_object.
+    external_points: 200
+    wrist_points: 200
+    # 触觉 taxel 点数，onehot_tactile=1。
+    tactile_points: 600
+    # 每个点的特征维度。
+    point_feature_dim: 8
+    # 单个 DexPoint 风格 PointNet 输出维度。
+    pointnet_feature_dim: 256
+
+  # Open3D 实时点云窗口，仅用于 xhand_student/visual_eval.py。
+  # 也可以用命令行覆盖：
+  #   --show_realtime_pc / --hide_realtime_pc
+  visual_eval_show_realtime_pc: True
+  # 是否在同一个 Open3D 窗口中显示实时触觉 taxel 点云。
+  # 灰色表示无接触 taxel，红/黄表示有接触 taxel，颜色亮度随 force_mag_norm 增强。
+  # 也可以用命令行覆盖：--show_tactile_pc / --hide_tactile_pc
+  visual_eval_show_tactile_pc: True
+  # visual_eval 实时点云显示坐标系。
+  # camera：在腕部相机坐标系下显示；原点是相机中心，+Z 是光轴。
+  # world：在世界坐标系下显示；绿色视锥会随腕部相机位姿变换到世界系。
+  # 也可以用命令行覆盖：--realtime_pc_frame camera|world
+  visual_eval_realtime_pc_frame: world
+
+  tactile_smoothing:
+    enabled: False
+    neighbor_k: 8
+    sigma_scale: 1.25
+    mask_threshold: 1.0e-6
+  tactile_sdf:
+    compute_tactile: True
+    enabled: True
+    substep_interval: 4
+    model: kinematic_taxel
+    use_taxel_radius_depth: True
+    use_contact_gate: True
+    use_nearby_taxels: True
+    use_link_velocity_cache: True
+    velocity_cache_debug: False
+    normal_source: sdf
+    max_depth: 0.002
+    force_scale: 5000.0
+    damping_scale: 10.0
+    normal_stiffness: 50000.0
+    normal_damping: 10.0
+    normal_exponent: 1.5
+    shear_scalar: 1.0
+    min_force: 0.05
+  
+  # Reward components and their coefficients
+  reward:
+    # Positive rewards for successful manipulation
+    affordance_reward:
+      coeff: 0.5                # Reward for joint distance to object points
+    affordance_contact_reward:
+      coeff: 2                # Reward for making contact with objects
+    affordance_impulse_reward:
+      coeff: 1.5                # Reward based on x-y direction impulse with objects
+      
+    # Negative rewards for table interaction
+    table_reward:
+      coeff: -0.03              # Penalty for proximity to table
+    table_contact_reward:
+      coeff: -1.0               # Penalty for making contact with table
+    table_impulse_reward:
+      coeff: -0.5               # Penalty based on impulse with table
+
+    # Penalties for arm behavior
+    arm_height_reward:
+      coeff: -0.05              # Penalty for arm being too low
+    arm_contact_reward:
+      coeff: -0.1               # Penalty for arm contacgt with table
+    arm_impulse_reward:
+      coeff: -0.1               # Penalty based on arm impulses with table
+    arm_collision_reward:
+      coeff: -1.0               # Penalty for arm self-collisions
+      
+    # Object interaction penalties
+    push_reward:
+      coeff: -15.0              # Penalty for pushing objects to the table
+      # coeff: -0.0              # Penalty for pushing objects to the table
+
+    # Velocity and motion penalties
+    wrist_vel_reward_:
+      coeff: -1.0               # Penalty for high wrist linear velocity
+    wrist_qvel_reward_:
+      coeff: -0.1               # Penalty for high wrist angular velocity
+    obj_vel_reward_:
+      coeff: -15.0              # Severe penalty for high object linear velocity
+    obj_qvel_reward_:
+      coeff: -0.2               # Penalty for high object angular velocity
+    obj_displacement_reward:
+      coeff: -5.0               # Penalty for object displacement
+    arm_joint_vel_reward_:
+      coeff: -1.0               # Penalty for high arm joint velocities
+
+ppo:
+  learning_rate: 1.0e-4
+  learning_rate_schedule: adaptive
+  max_grad_norm: 2.0
+  desired_kl: 0.01
+
+# Neural network architecture
+architecture:
+  policy_net: [128, 128]
+  value_net: [128, 128]

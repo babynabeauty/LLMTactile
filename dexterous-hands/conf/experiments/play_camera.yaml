@@ -1,0 +1,21 @@
+# Recording-camera override for main.py play mode.
+#
+# Usage:
+#   python main.py --mode=play --task=<task> --robot=<robot> \
+#       --checkpoint=<ckpt> --config=conf/experiments/play_camera.yaml
+#
+# `cameras_options.rec` is the camera main.py records videos from. When it is set
+# here, registry.position_camera_config() leaves it untouched instead of deriving
+# a position from env spacing -- so editing the values below moves the play-mode
+# camera with no code changes. Stack with another --config by passing both.
+#
+# Tip: scripts/task_viewer.py can print the live viewer camera pose; paste those
+# numbers here for a hand-picked angle (see conf/experiments/screwdriver_paper_defaults.yaml).
+
+cameras_options:
+  rec:
+    cam_pos: [0.35, -0.35, 0.45]      # camera world position (x, y, z)
+    cam_lookat: [0.0, 0.0, 0.15]      # point the camera aims at
+    cam_up: [0.0, 0.0, 1.0]           # world up vector
+    cam_fov: 40.0                     # vertical field of view, degrees
+    cam_resolution: [1280, 720]       # output (width, height) in pixels

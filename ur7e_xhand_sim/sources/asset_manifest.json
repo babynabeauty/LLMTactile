@@ -1,0 +1,287 @@
+[
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5_xhand.urdf",
+    "path": "sources/ur5_xhand.urdf",
+    "sha256": "5221f0a7662f516e2012de59b0bb5c0c5327e249cb7f8396a9dff3a08d79cba1"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/base.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/base.dae",
+    "sha256": "c30e4d7228ef633dca2a02c26df2316741f6642cb6333e8289dba6e6d0b22819"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/base.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/base.obj",
+    "sha256": "3cb2853dc67adf43c6f5c73a2e112741a2df877f9755a7d9d71314185b5bf36a"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/shoulder.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/shoulder.dae",
+    "sha256": "c581bfa55b86061d9b99d315ed53817b6b693e6a500643bbf9bbb783322d585d"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/shoulder.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/shoulder.obj",
+    "sha256": "de1a6ec2e5efc7a2c236947d2c00db7b2c957c3165c4c7501c6fcc32b1fe05b0"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/upperarm.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/upperarm.dae",
+    "sha256": "c040a05bb224f14cfab6aa6704d70cbb773ada940eca9a3e34e6ce486c4c4c29"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/upperarm.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/upperarm.obj",
+    "sha256": "07acb508605d2b006bfd9939e533185a9749599eab3c2b6ccaa83545acda0633"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/forearm.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/forearm.dae",
+    "sha256": "04694bf57dac46e9b8bc7c30f2eec75a1bc762e1f1a879ea30c944f24cacbad8"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/forearm.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/forearm.obj",
+    "sha256": "f82eaa3f1aef8c11b6f444b3de481d34b8308b1889518eb0a2652ddaedd27a65"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/wrist1.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/wrist1.dae",
+    "sha256": "a07a3d96d2540f9be12e4a07bcb8577d9f1e36005920c396a407804343a3b588"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/wrist1.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/wrist1.obj",
+    "sha256": "e7b23c15529325e9a5aa61f1cc5245f76e7c9e9a4fc87c4e1030bb25471fb6aa"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/wrist2.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/wrist2.dae",
+    "sha256": "982fa42933c6f81629882ad7975e9ba5dac5d474a6b56694e233708376cf840e"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/wrist2.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/wrist2.obj",
+    "sha256": "9d3d91b5528434964a3e97097b98bdd0aeef44728d65da77997f6750ed27107d"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/visual/wrist3.dae",
+    "path": "sources/assembly/ur5e_meshes/visual/wrist3.dae",
+    "sha256": "7a7664ac4adcd53b0870fe6a2b8b975693d846dd4d07a5f44194c7d16f4890ba"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/ur5e_meshes/collision_obj/wrist3.obj",
+    "path": "sources/assembly/ur5e_meshes/collision_obj/wrist3.obj",
+    "sha256": "3924dd4f4b15565060a85acbf3e27cff5f356d17c7d5a6b4dd149200e8405ac7"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/Flange_meshes/coupling_D405_m.stl",
+    "path": "sources/assembly/Flange_meshes/coupling_D405_m.stl",
+    "sha256": "62e4bd70bfef928104a013695c8a5f195a18d533cd0b389e4729381432e291c1"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/Flange_meshes/coupling_D405_m.obj",
+    "path": "sources/assembly/Flange_meshes/coupling_D405_m.obj",
+    "sha256": "0624435cf003531a906fca13598c131d3546c7493636aa424f1020e0df0fd013"
+  },
+  {
+    "source": "/home/sai/zsq/TactileTTT/ur5_xhand/camera_meshes/RealSense_D405_m.stl",
+    "path": "sources/assembly/camera_meshes/RealSense_D405_m.stl",
+    "sha256": "3416b3ede80666a884456e671ffcc082045addfc7d098d27e48d508b4ea0cc30"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_back_link.STL",
+    "path": "sources/xhand/meshes/right_hand_back_link.STL",
+    "sha256": "73bbeb682fddeaf6034b0032a89074a5e94b43f284a62f86c651ed836e406c33"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_ee_link.STL",
+    "path": "sources/xhand/meshes/right_hand_ee_link.STL",
+    "sha256": "d5c68aea36c3ec01ef6256bca427eb1aaf028a39daf8dac8ff1736aac58159c0"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_index_bend_link.STL",
+    "path": "sources/xhand/meshes/right_hand_index_bend_link.STL",
+    "sha256": "f388863a62d3eb0ebd844b49d567fc4582f352d1a796fe4b2fe290d5e4635f74"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_index_rotaback_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_index_rotaback_link1.STL",
+    "sha256": "4457236883a16564c5be4fdbf6221968afc140dd7be0324111874a15f906069c"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_index_rotaback_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_index_rotaback_link2.STL",
+    "sha256": "ac99b76c0edb85f8f9dc2013545a81eaf20613c5aae8ac2f7796dec5dbd4065c"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_index_rota_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_index_rota_link1.STL",
+    "sha256": "b9949f53f835d97fc2d3f6c12f700ed8c1c5b09f878441e2110c5dfdba3fb34d"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_index_rota_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_index_rota_link2.STL",
+    "sha256": "1fa056d517a98c8c6f0e624035f2b47710550c82a63957f64a62c28a65a3b973"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_index_rota_tip.STL",
+    "path": "sources/xhand/meshes/right_hand_index_rota_tip.STL",
+    "sha256": "7200d5b8ffa8ec54bf7990b0e222368b9000a67002a24cd9a623589679e79984"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_link.STL",
+    "path": "sources/xhand/meshes/right_hand_link.STL",
+    "sha256": "c81f5ac529bbe5a789ffb8237e317e45a211b6cc35e8631f7145c049c735fd9f"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_midback_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_midback_link1.STL",
+    "sha256": "2189eafc6922abafc9f5800a48c314e0177fed8bc50b1af287696a1500ad5f6c"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_midback_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_midback_link2.STL",
+    "sha256": "b85799cd9d28cde6e3fad1f4f346485897927e13427cee8e00479c22398527f8"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_mid_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_mid_link1.STL",
+    "sha256": "3901eb5e8e1711454d04b7cdabd1ba9e6a1817f477f67872513975c97f74943d"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_mid_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_mid_link2.STL",
+    "sha256": "bc0437cd644858337c9a9fdeb644cfead95c3eaa1eeef1059d2644e0752b5163"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_mid_tip.STL",
+    "path": "sources/xhand/meshes/right_hand_mid_tip.STL",
+    "sha256": "e813d1f63455768a718c5c7d6056ff70b05ba1dbd492aacb3e2f26d3879009d8"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_pinkyback_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_pinkyback_link1.STL",
+    "sha256": "4400ce5bd194b4597a99443d595143e5164609434ab5fe331fc03a7d8cd722a2"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_pinkyback_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_pinkyback_link2.STL",
+    "sha256": "ed1209ad2da19db9278c807221cfaa4fd52c091e31cac344a5a852b4d0e72b7e"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_pinky_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_pinky_link1.STL",
+    "sha256": "73c3bbb5918d6aea10229abbd52312086cc57d51037535b34c33ac138c8e430d"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_pinky_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_pinky_link2.STL",
+    "sha256": "2496feb195cc69a0fca6ce60c695c5d9dfbb51bfce2c45cb70965ec56376ef56"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_pinky_tip.STL",
+    "path": "sources/xhand/meshes/right_hand_pinky_tip.STL",
+    "sha256": "5058c94100d6e63f18b5064042287fb9c073ff777b4882b7ef97b48b49513921"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_ringback_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_ringback_link1.STL",
+    "sha256": "083719f02bfcfcd61edcbfc834a6178b32e48b7a82a07da1be9db343b2207246"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_ringback_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_ringback_link2.STL",
+    "sha256": "3eab5ede2783143cdc30de6cd3dd54439b2606a218c5ca1e191c583d621f8a67"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_ring_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_ring_link1.STL",
+    "sha256": "3e72ea74ea1cdd42bf7c312c4a23e4f1c8e0e0b013ba8e3cb282b2b609c32731"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_ring_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_ring_link2.STL",
+    "sha256": "ae7ce7cbbe0c2880eea8364338cdd8fc279b4403d8aab3f0519bd36747950f1c"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_ring_tip.STL",
+    "path": "sources/xhand/meshes/right_hand_ring_tip.STL",
+    "sha256": "4f97752422dcba57697ef674eaecefabd459f61d02216745cb11a2fbcf769a67"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_thumb_bend_link.STL",
+    "path": "sources/xhand/meshes/right_hand_thumb_bend_link.STL",
+    "sha256": "fe26f354076a440bfd838250ada7587d5fda0199d864210c293503a690b32148"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_thumb_rotaback_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_thumb_rotaback_link1.STL",
+    "sha256": "f4fc4d5b03cb6a0cbe9a7f2090351a5485ce1572f01a970a3410fc16e580ad96"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_thumb_rotaback_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_thumb_rotaback_link2.STL",
+    "sha256": "ecd9b2bd0dadf23f81b2ea1128a4a40d89b093e6eb1248c9bf6b4f98a5f5035b"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_thumb_rota_link1.STL",
+    "path": "sources/xhand/meshes/right_hand_thumb_rota_link1.STL",
+    "sha256": "30df38923feddec135ef9e1a9ac5570e330c580e0d5fd2ff04ce568091884b01"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_thumb_rota_link2.STL",
+    "path": "sources/xhand/meshes/right_hand_thumb_rota_link2.STL",
+    "sha256": "ceb6673529e5284e324c756d0279737e847de3921b5d71df5888015b6889a2c7"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/meshes/right_hand_thumb_rota_tip.STL",
+    "path": "sources/xhand/meshes/right_hand_thumb_rota_tip.STL",
+    "sha256": "6c49d268e518dd4838b5a0afa4e9b001fb0066f2d2898f5fa3d4e878d2b79b68"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/urdf/Xhand-urdf.zip!Xhand-urdf/xhand1_right(1)/urdf/xhand_right.urdf",
+    "path": "sources/xhand/urdf/xhand_right.urdf",
+    "sha256": "911ffc19dd26c374b77c42d4c25a05eb73af02048c12f1b8d13496806fd94be1"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/触觉传感器/points.t16 (2).json",
+    "path": "sources/tactile/t16_sensor.json",
+    "sha256": "4351949cdcad1cfb4644fe6a83b48087f6344d08f2caac2a63d6da42ef4ba8ac"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/触觉传感器/points.t30 (2).json",
+    "path": "sources/tactile/t30_sensor.json",
+    "sha256": "3fced74f95a6b60e1b11c87a29ae103e264dec4ff0386682ae34afe6630cd5b5"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/触觉传感器/points_t16_transformed (2).json",
+    "path": "sources/tactile/t16_link.json",
+    "sha256": "5aebda78b6220dc51ab073540743722117742e4fe41e4377ea4cac072384284d"
+  },
+  {
+    "source": "/home/sai/zsq/Xhand1交付资料-带触觉/Xhand1交付资料-带触觉/触觉传感器/points_t30_right_hand_transformed.json",
+    "path": "sources/tactile/t30_right_link.json",
+    "sha256": "96f7fa1d5f7e9fc847aafc650ad70dd965a83aa0d7b600687bac9c48ea893d3a"
+  },
+  {
+    "source": "https://github.com/UniversalRobots/Universal_Robots_ROS2_Description/blob/81f7c9fe003c2f0e02eec5a7253f1b262ad38b61/config/ur7e/default_kinematics.yaml",
+    "path": "sources/ur7e_official/default_kinematics.yaml",
+    "sha256": "4ffc6086bb0118a5a8e4a3576ef41de878de946710799ea4835789063fa9c0bc"
+  },
+  {
+    "source": "https://github.com/UniversalRobots/Universal_Robots_ROS2_Description/blob/81f7c9fe003c2f0e02eec5a7253f1b262ad38b61/config/ur7e/physical_parameters.yaml",
+    "path": "sources/ur7e_official/physical_parameters.yaml",
+    "sha256": "0e58b89069d8d87b24cce0c2c02832d88de0f3229baf42916953ce1c71f0fa2d"
+  },
+  {
+    "source": "https://github.com/UniversalRobots/Universal_Robots_ROS2_Description/blob/81f7c9fe003c2f0e02eec5a7253f1b262ad38b61/config/ur7e/joint_limits.yaml",
+    "path": "sources/ur7e_official/joint_limits.yaml",
+    "sha256": "1e908454a0fb073761a0c675f708eb003ca7d5333a9e0863ef87fe40d9abb3c7"
+  },
+  {
+    "source": "https://github.com/UniversalRobots/Universal_Robots_ROS2_Description/blob/81f7c9fe003c2f0e02eec5a7253f1b262ad38b61/LICENSE",
+    "path": "sources/ur7e_official/LICENSE",
+    "sha256": "143077f9f6a8de5a99f78c2c2472801fb53cf240277ef661642f079b9acdfff8"
+  }
+]

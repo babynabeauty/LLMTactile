@@ -1,0 +1,106 @@
+# Two ablations per pinned teacher, both against the completed F141 policies in
+# docs/experiments/pinned-teachers.md:
+#   <task>-<hand>               every tactile type, actual layout, clean
+#   <task>-<hand>-imperfection  force_torque only, actual layout, mild and strong
+# The second omits the baseline because the first already emits it for that seed.
+defaults:
+  layouts:
+  - actual
+  imperfections:
+  - clean
+  sensor_types:
+  - link_bool
+  - link_force
+  - agg_bool
+  - agg_force
+  - bool
+  - depth
+  - force
+  - force_torque
+  - proximity
+  - elastomer
+  seeds:
+  - 42
+  model: tac_mlp
+  encoder: rnn
+  tactile_encoder: rnn
+  temporal_reduction: none
+  max_iters: 3000
+  # A companion entry on the same hand/task/seed sets this false.
+  baseline: true
+  teacher_checkpoint: null
+  teacher_config: null
+  task_config: null
+experiments:
+  in_hand_repose-wuji:
+    task: in_hand_repose
+    hand: wuji
+    teacher_checkpoint: teachers/f141/in_hand_repose-wuji/model_5999.pt
+    teacher_config: teachers/f141/in_hand_repose-wuji/eden_config.yaml
+    task_config: conf/experiments/in_hand_repose_wuji_fresh_v141_limits_gentle025_rnd_fast_v7_distill.yaml
+  in_hand_repose-wuji-imperfection:
+    task: in_hand_repose
+    hand: wuji
+    sensor_types:
+    - force_torque
+    imperfections:
+    - mild
+    - strong
+    baseline: false
+    teacher_checkpoint: teachers/f141/in_hand_repose-wuji/model_5999.pt
+    teacher_config: teachers/f141/in_hand_repose-wuji/eden_config.yaml
+    task_config: conf/experiments/in_hand_repose_wuji_fresh_v141_limits_gentle025_rnd_fast_v7_distill.yaml
+  in_fingers_rotate-sharpa:
+    task: in_fingers_rotate
+    hand: sharpa
+    teacher_checkpoint: teachers/f141/in_fingers_rotate-sharpa/model_5500.pt
+    teacher_config: teachers/f141/in_fingers_rotate-sharpa/eden_config.yaml
+    task_config: conf/experiments/in_fingers_rotate_sharpa_fresh_v141_hora_gain4_backtrackdebt_noforce_rnd_fast_v8_distill.yaml
+  in_fingers_rotate-sharpa-imperfection:
+    task: in_fingers_rotate
+    hand: sharpa
+    sensor_types:
+    - force_torque
+    imperfections:
+    - mild
+    - strong
+    baseline: false
+    teacher_checkpoint: teachers/f141/in_fingers_rotate-sharpa/model_5500.pt
+    teacher_config: teachers/f141/in_fingers_rotate-sharpa/eden_config.yaml
+    task_config: conf/experiments/in_fingers_rotate_sharpa_fresh_v141_hora_gain4_backtrackdebt_noforce_rnd_fast_v8_distill.yaml
+  grasp_lift-allegro:
+    task: grasp_lift
+    hand: allegro
+    teacher_checkpoint: teachers/f141/grasp_lift-allegro/model_4999.pt
+    teacher_config: teachers/f141/grasp_lift-allegro/eden_config.yaml
+    task_config: conf/experiments/grasp_lift_allegro_fresh_v141_simple_contact_fast_v7_distill.yaml
+  grasp_lift-allegro-imperfection:
+    task: grasp_lift
+    hand: allegro
+    sensor_types:
+    - force_torque
+    imperfections:
+    - mild
+    - strong
+    baseline: false
+    teacher_checkpoint: teachers/f141/grasp_lift-allegro/model_4999.pt
+    teacher_config: teachers/f141/grasp_lift-allegro/eden_config.yaml
+    task_config: conf/experiments/grasp_lift_allegro_fresh_v141_simple_contact_fast_v7_distill.yaml
+  in_hand_repose-allegro:
+    task: in_hand_repose
+    hand: allegro
+  in_hand_repose-sharpa:
+    task: in_hand_repose
+    hand: sharpa
+  in_fingers_rotate-wuji:
+    task: in_fingers_rotate
+    hand: wuji
+  in_fingers_rotate-allegro:
+    task: in_fingers_rotate
+    hand: allegro
+  grasp_lift-wuji:
+    task: grasp_lift
+    hand: wuji
+  grasp_lift-sharpa:
+    task: grasp_lift
+    hand: sharpa

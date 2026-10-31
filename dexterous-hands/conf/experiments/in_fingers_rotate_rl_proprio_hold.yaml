@@ -1,0 +1,19 @@
+# Proprioception-only recurrent policy trained from scratch, with a drop penalty
+# sized for a blind policy.
+#
+# HORA's -10 works for the privileged teacher because it starts from a grasp cache
+# and immediately earns rotation reward, so ending an episode early costs it real
+# return. A policy that cannot see the object earns nothing either way at the start,
+# so there is no gradient toward holding and it drops on nearly every episode --
+# about 100 drops per logging window against the teacher's 0.08. This makes holding
+# worth roughly half an episode of saturated rotation reward, which is the range that
+# found sustained rotation in earlier in-hand rotation runs; much larger and the policy
+# freezes and holds the object still instead.
+runner_options:
+  actor:
+    rnn_hidden_dim: 128
+    rnn_num_layers: 1
+    hidden_dims: [256, 128]
+reward_options:
+  is_dropped:
+    weight: -100.0

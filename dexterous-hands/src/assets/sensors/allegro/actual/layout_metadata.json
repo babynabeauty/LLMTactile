@@ -1,0 +1,272 @@
+{
+  "active_count": 368,
+  "region_counts": {
+    "index": 78,
+    "middle": 78,
+    "ring": 78,
+    "thumb": 62,
+    "palm": 72
+  },
+  "sources": {
+    "xela_commit": "4cc8e177fedd4b66d29672536484be648eede7da",
+    "menagerie_commit": "71f066ad0be9cd271f7ed58c030243ef157af9f4"
+  },
+  "links": [
+    {
+      "link_name": "ahr_palm_1_4x6_palm_link",
+      "region": "palm",
+      "sensor_type": "4x6",
+      "shape": [
+        4,
+        6
+      ],
+      "count": 24,
+      "radius_m": 0.00358464,
+      "mesh": "4x6.stl",
+      "max_source_projection_m": 2.973986384839388e-06
+    },
+    {
+      "link_name": "ahr_palm_2_4x6_palm_link",
+      "region": "palm",
+      "sensor_type": "4x6",
+      "shape": [
+        4,
+        6
+      ],
+      "count": 24,
+      "radius_m": 0.00358464,
+      "mesh": "4x6.stl",
+      "max_source_projection_m": 2.973986384839388e-06
+    },
+    {
+      "link_name": "ahr_palm_3_4x6_palm_link",
+      "region": "palm",
+      "sensor_type": "4x6",
+      "shape": [
+        4,
+        6
+      ],
+      "count": 24,
+      "radius_m": 0.00358464,
+      "mesh": "4x6.stl",
+      "max_source_projection_m": 2.973986384839388e-06
+    },
+    {
+      "link_name": "index_1A_4x4_palm_link",
+      "region": "index",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "index_1B_4x4_palm_link",
+      "region": "index",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "index_2_4x4_palm_link",
+      "region": "index",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "index_3_tip",
+      "region": "index",
+      "sensor_type": "tip",
+      "shape": [
+        5,
+        6
+      ],
+      "count": 30,
+      "radius_m": 0.00345726,
+      "mesh": "ft_c.stl",
+      "max_source_projection_m": 0.002771260039177077
+    },
+    {
+      "link_name": "middle_1A_4x4_palm_link",
+      "region": "middle",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "middle_1B_4x4_palm_link",
+      "region": "middle",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "middle_2_4x4_palm_link",
+      "region": "middle",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "middle_3_tip",
+      "region": "middle",
+      "sensor_type": "tip",
+      "shape": [
+        5,
+        6
+      ],
+      "count": 30,
+      "radius_m": 0.00345726,
+      "mesh": "ft_c.stl",
+      "max_source_projection_m": 0.002771260039177077
+    },
+    {
+      "link_name": "ring_1A_4x4_palm_link",
+      "region": "ring",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "ring_1B_4x4_palm_link",
+      "region": "ring",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "ring_2_4x4_palm_link",
+      "region": "ring",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "ring_3_tip",
+      "region": "ring",
+      "sensor_type": "tip",
+      "shape": [
+        5,
+        6
+      ],
+      "count": 30,
+      "radius_m": 0.00345726,
+      "mesh": "ft_c.stl",
+      "max_source_projection_m": 0.002771260039177077
+    },
+    {
+      "link_name": "thumb_2_4x4_palm_link",
+      "region": "thumb",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "thumb_3_4x4_palm_link",
+      "region": "thumb",
+      "sensor_type": "4x4",
+      "shape": [
+        4,
+        4
+      ],
+      "count": 16,
+      "radius_m": 0.0023333,
+      "mesh": "4x4.stl",
+      "max_source_projection_m": 0.00026199985983751744
+    },
+    {
+      "link_name": "thumb_3_tip",
+      "region": "thumb",
+      "sensor_type": "tip",
+      "shape": [
+        5,
+        6
+      ],
+      "count": 30,
+      "radius_m": 0.00345726,
+      "mesh": "ft_c.stl",
+      "max_source_projection_m": 0.002771260039177077
+    }
+  ],
+  "layout_note": "XELA hardware counts, dense per-pad grids. Curved tips resampled to 5x6; hardware indexing is not preserved. Link-local metres.",
+  "radius_note": "Half the median nearest-neighbor spacing; simulation footprint, not calibrated receptive field.",
+  "source_sha256": {
+    "reference/ahrcpcpn.urdf": "5fb77ead8c3db82ac4a9721e19ab55e97d7b12db1aad0c57814f7fed8c98a906",
+    "reference/xela.xacro": "667ac80fd721612ecd5e807354f693a44bd5df67afadafbb2dec7a58f6291939",
+    "reference/menagerie_right_hand.xml": "cec3efe34be49c8220c23afdae0cfacbce10164a5bc7c34075b6668ee0a862a6",
+    "mesh/4x4.stl": "26aaed2fcec8ad473dea04a9ccef4e75953af21cab2b6ed31627c9e81b1fc05d",
+    "mesh/4x6.stl": "498e095548f04cb4ba1ac93424d3c94921de0632c9e2bd77c923013a7b88f563",
+    "mesh/allegro/base.stl": "8d7c3cb43d1d777dc116b2ccf8aa49f9d05282d0f989062a83d5b349e1778880",
+    "mesh/allegro/link_0.0_ext.STL": "2a0d704cafc156126d3306144daf59e4c59c739d37bb20e87d59ab076db81e38",
+    "mesh/allegro/link_1.0.stl": "191d5ab13fb615899d9854251a74aa35882e195e4e269d2b09a33b93ddaf2556",
+    "mesh/allegro/link_12.0_right.STL": "fda9dc8528e8388dd460d7202cca7dc0e0c360aac36fbebb7e35e80b006735a5",
+    "mesh/allegro/link_1_cover.stl": "b0c4d4d6a72c58bfc893b9da5b8d539e20c2ce1439a3ca78524c006f0e576b58",
+    "mesh/allegro/link_2.0.stl": "b060b4f22128b5e2d8d89da0a8c0737da4585c81ffbab768235b38eb9980cc4b",
+    "mesh/allegro/link_2_cover.stl": "e05a6b60f910b905bf59a6f73638c79b75cc59d386dfe3b35144fc76d65a1f71",
+    "mesh/allegro/link_3.0.STL": "c11ab1d0a7e564c578732b7fc2e49d98cba0e0aef65b694d45deb47123f7447a",
+    "mesh/allegro/thumb_1.0.stl": "b9a4f9f53337837e10dd5bb4b1e5a5cd608edc1f3972dd6d2e6a1e4d1078e7e3",
+    "mesh/allegro/thumb_1_cover.stl": "f45e3d122dc6c335183ba14180b0c166863bae3e324c3b0f96452e2c8dc9bd2a",
+    "mesh/allegro/thumb_2.0.stl": "81b0e54e2147768afff02697d29329a6ff355135da50c32921e12d39972ddbfd",
+    "mesh/allegro/thumb_2_cover.stl": "60b428b4ce38b38179e54ed608586b565fd223fed70af16d45e6ce2a98153376",
+    "mesh/ft_c.stl": "4d313420a0d0c4b330ba77f27d78235455c804fdf854f6ac649d6e6bba03d4da"
+  }
+}

@@ -1,0 +1,60 @@
+dataset: objaverse-1.0
+licenses:
+  - cc0
+  - by
+scale_bands_m:
+  - 0.045
+  - 0.065
+  - 0.085
+minimum_extent_m: 0.01
+minimum_height_m: 0.02
+maximum_extent_m: 0.15
+maximum_faces: 10000
+maximum_source_faces: 250000
+minimum_largest_component_fraction: 0.5
+maximum_convex_parts: 5
+physics_rejections:
+  2ea85fec1d3744fda5e00337aabc62be: settled 16.4 mm in the 16-variant Sharpa preflight
+  185b37482f3842cabfa67cfcac62fdc3: settled 15.0 mm in the 16-variant Sharpa preflight
+strata:
+  rounded:
+    - ball
+    - apple
+    - orange_(fruit)
+    - potato
+  cylindrical:
+    - bottle
+    - can
+    - jar
+    - thermos_bottle
+  box_like:
+    - box
+    - pencil_box
+    - remote_control
+    - cellular_telephone
+  tapered:
+    - vase
+    - flowerpot
+    - cone
+    - bottle
+  handled:
+    - mug
+    - teacup
+    - pitcher_(vessel_for_liquid)
+    - watering_can
+  concave:
+    - bowl
+    - soup_bowl
+    - cup
+    - basket
+  asymmetric:
+    - toy
+    - shoe
+    - mouse_(computer_equipment)
+    - camera
+  elongated:
+    - hammer
+    - flashlight
+    - marker
+    - wrench
+    - drill

@@ -1,0 +1,161 @@
+{
+  "profile": "actual",
+  "active_count": 1206,
+  "region_counts": {
+    "palm": 0,
+    "thumb": 270,
+    "index": 234,
+    "middle": 234,
+    "ring": 234,
+    "pinky": 234
+  },
+  "source_urls": [
+    "https://www.sharpa.com/pages/wave",
+    "https://github.com/sharpa-robotics/sharpa-tactile-sensor-assets/tree/865530a98a0ca0e69d177f2121833f8bb3ed94de"
+  ],
+  "geometry": "Sharpa Wave right MJCF HB1 contact meshes, in link-local metres",
+  "layout_note": "Fingertip-only, nominal 1 mm projected spacing; a simulation discretization of spatial resolution, not the 240x240 optical image or a hardware taxel count. Edge margins omit the pad silhouette.",
+  "radius_note": "0.5 mm simulation footprint",
+  "fit_note": "Dense curved grids, 5% width margin each side. Vendor wave_01 maps guide coverage; probes are projected onto the current HB1 meshes. No hardware row/column correspondence.",
+  "links": [
+    {
+      "link_name": "right_thumb_DP",
+      "region": "thumb",
+      "shape": [
+        18,
+        15
+      ],
+      "count": 270,
+      "radius_m": 0.0005,
+      "normal_axis": [
+        0,
+        1,
+        0
+      ],
+      "length_axis": [
+        1,
+        0,
+        0
+      ],
+      "axial_bounds_m": [
+        0.012,
+        0.03
+      ],
+      "mesh": "meshes/elastomer_HB1_TH.STL"
+    },
+    {
+      "link_name": "right_index_DP",
+      "region": "index",
+      "shape": [
+        18,
+        13
+      ],
+      "count": 234,
+      "radius_m": 0.0005,
+      "normal_axis": [
+        0,
+        1,
+        0
+      ],
+      "length_axis": [
+        1,
+        0,
+        0
+      ],
+      "axial_bounds_m": [
+        0.0085,
+        0.0265
+      ],
+      "mesh": "meshes/elastomer_HB1_4F.STL"
+    },
+    {
+      "link_name": "right_middle_DP",
+      "region": "middle",
+      "shape": [
+        18,
+        13
+      ],
+      "count": 234,
+      "radius_m": 0.0005,
+      "normal_axis": [
+        0,
+        1,
+        0
+      ],
+      "length_axis": [
+        1,
+        0,
+        0
+      ],
+      "axial_bounds_m": [
+        0.0085,
+        0.0265
+      ],
+      "mesh": "meshes/elastomer_HB1_4F.STL"
+    },
+    {
+      "link_name": "right_ring_DP",
+      "region": "ring",
+      "shape": [
+        18,
+        13
+      ],
+      "count": 234,
+      "radius_m": 0.0005,
+      "normal_axis": [
+        0,
+        1,
+        0
+      ],
+      "length_axis": [
+        1,
+        0,
+        0
+      ],
+      "axial_bounds_m": [
+        0.0085,
+        0.0265
+      ],
+      "mesh": "meshes/elastomer_HB1_4F.STL"
+    },
+    {
+      "link_name": "right_pinky_DP",
+      "region": "pinky",
+      "shape": [
+        18,
+        13
+      ],
+      "count": 234,
+      "radius_m": 0.0005,
+      "normal_axis": [
+        0,
+        1,
+        0
+      ],
+      "length_axis": [
+        1,
+        0,
+        0
+      ],
+      "axial_bounds_m": [
+        0.0085,
+        0.0265
+      ],
+      "mesh": "meshes/elastomer_HB1_4F.STL"
+    }
+  ],
+  "source_sha256": {
+    "tactileSensor_map_4F_normal.npy": "ef355e4d85d14eed1bb804e4024c6d86c32a6357f9c678973521aa113f6e7ee0",
+    "tactileSensor_map_4F_point.npy": "bafcca4cb16857047861ec732d365de5a30df8c22daf677edf37b9ad1457454d",
+    "tactileSensor_map_TH_normal.npy": "f58814ae897f8cf7dad94db8446668ddb2fc10eb6cde400237b8c029f6c6921a",
+    "tactileSensor_map_TH_point.npy": "e14db6183c1061d13663a2609ec42049e3eff66136626dc6a5d59c512cec078c"
+  },
+  "mesh_sha256": {
+    "right_thumb_DP": "437f363ca7a40b6e9b9152ebb81db249c51de71565cdb44b7df6e2cdf0da3312",
+    "right_index_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_middle_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_ring_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858",
+    "right_pinky_DP": "88b214c5c614b4b5f0c7cf195a90825b41e20745b1b65442854b371ff065e858"
+  },
+  "mjcf_sha256": "43d9cb63d724889b69574a5e0981aee4a2f30d825c85f3098988e3a7a3bb9980"
+}

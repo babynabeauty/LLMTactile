@@ -1,0 +1,10 @@
+# Smoke test: does lower initial action noise stop exploration ejecting wuji's grasp?
+env_options:
+  num_envs: 8192
+
+runner_options:
+  max_iterations: 5000
+  save_interval: 500
+  actor:
+    distribution_cfg:
+      init_std: 0.5

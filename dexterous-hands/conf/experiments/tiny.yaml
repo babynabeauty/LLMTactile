@@ -1,0 +1,6 @@
+env_options:
+  num_envs: 4
+
+runner_options:
+  max_iterations: 10
+  logger: tensorboard  # no wandb during smoke tests

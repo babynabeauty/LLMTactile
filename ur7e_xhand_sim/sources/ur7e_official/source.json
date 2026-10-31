@@ -1,0 +1,10 @@
+{
+  "repository": "https://github.com/UniversalRobots/Universal_Robots_ROS2_Description",
+  "commit": "81f7c9fe003c2f0e02eec5a7253f1b262ad38b61",
+  "files": [
+    "config/ur7e/default_kinematics.yaml",
+    "config/ur7e/physical_parameters.yaml",
+    "config/ur7e/joint_limits.yaml",
+    "LICENSE"
+  ]
+}

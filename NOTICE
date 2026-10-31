@@ -1,0 +1,19 @@
+Tactile Genesis
+Copyright 2026 the Tactile Genesis authors
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It redistributes third-party robot models and assets that carry their own licences.
+Those licences govern the files in their directory and are included alongside them:
+
+  dexterous-hands/src/assets/hands/allegro/          BSD 3-Clause, Copyright (c) 2016 SimLab
+  dexterous-hands/src/assets/hands/allegro/xela_v4/  GNU General Public License v3.0
+  dexterous-hands/src/assets/hands/sharpa/           Apache License 2.0, Copyright 2025 Sharpa Group
+                                                     (see also its NOTICE, covering MuJoCo)
+  dexterous-hands/src/assets/hands/wuji/             MIT License, Copyright (c) 2025 Wuji Technology
+
+The XELA V4 tactile model under allegro/xela_v4/ is GPL-3.0. It is redistributed unmodified,
+as simulation data consumed at runtime, with its licence text intact; the GPL applies to that
+directory and not to the rest of this repository.
+
+The vendored Eden, Genesis and rsl_rl checkouts carry their own licences in their directories.

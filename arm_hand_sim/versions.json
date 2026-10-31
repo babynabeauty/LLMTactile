@@ -1,0 +1,11 @@
+{
+  "python": "3.12.3",
+  "genesis-world": "1.4.1",
+  "torch": "2.10.0+cu128",
+  "numpy": "2.3.5",
+  "Pillow": "11.3.0",
+  "eden": "0.1.0",
+  "rsl-rl-lib": "5.0.1",
+  "tactile_genesis_commit": "4777fd5da08244acbc677dca6f6f9acfb2d69d2b",
+  "arm_asset_commit": "62ab00f2bc44f6f20c1c9b7a13f3fb1dd41a4e35"
+}

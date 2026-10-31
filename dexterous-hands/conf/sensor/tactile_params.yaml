@@ -1,0 +1,257 @@
+# Hardware-inspired simulation presets, not calibrated device specifications.
+# Units and update/reset semantics: docs/tactile_experiments.md.
+link_bool:
+  params: {}
+  imperfections:
+    clean: {}
+    mild:
+      noise: 0.0075
+    strong:
+      noise: 0.03
+bool:
+  params:
+    contact_threshold: 0.0005
+  imperfections:
+    clean: {}
+    mild:
+      release_threshold: 0.00042500000000000003
+      dead_taxel_probability: 0.01
+    strong:
+      release_threshold: 0.0002
+      dead_taxel_probability: 0.05
+agg_bool:
+  params:
+    contact_threshold: 0.0005
+  imperfections:
+    clean: {}
+    mild:
+      release_threshold: 0.00042500000000000003
+      dead_taxel_probability: 0.01
+    strong:
+      release_threshold: 0.0002
+      dead_taxel_probability: 0.05
+link_force:
+  params:
+    min_force: 0.0001
+    max_force: 10.0
+  imperfections:
+    clean: {}
+    mild:
+      noise: 0.02
+      random_walk: 0.0025
+      resolution: 0.00125
+    strong:
+      noise: 0.08
+      random_walk: 0.01
+      resolution: 0.005
+depth:
+  params: {}
+  imperfections:
+    clean: {}
+    mild:
+      noise: 5.0e-05
+      random_walk: 2.0e-06
+      resolution: 2.5e-05
+      probe_radius_noise: 7.5e-05
+      dead_taxel_probability: 0.01
+      probe_gain_resample_range:
+      - 0.95
+      - 1.05
+      hysteresis_strength: 0.05
+      hysteresis_tau: 0.05
+    strong:
+      noise: 0.0002
+      random_walk: 8.0e-06
+      resolution: 0.0001
+      probe_radius_noise: 0.0003
+      dead_taxel_probability: 0.05
+      probe_gain_resample_range: &id001
+      - 0.85
+      - 1.15
+      hysteresis_strength: 0.25
+      hysteresis_tau: 0.15
+agg_force:
+  params: {}
+  imperfections:
+    clean: {}
+    mild:
+      noise: 5.0e-05
+      random_walk: 2.0e-06
+      resolution: 2.5e-05
+      probe_radius_noise: 7.5e-05
+      dead_taxel_probability: 0.01
+      probe_gain_resample_range:
+      - 0.95
+      - 1.05
+      hysteresis_strength: 0.05
+      hysteresis_tau: 0.05
+    strong:
+      noise: 0.0002
+      random_walk: 8.0e-06
+      resolution: 0.0001
+      probe_radius_noise: 0.0003
+      dead_taxel_probability: 0.05
+      probe_gain_resample_range: *id001
+      hysteresis_strength: 0.25
+      hysteresis_tau: 0.15
+force:
+  torque_reference_length_m: 0.001 # 1 mm reference lever arm: N -> N m
+  params: &id002
+    normal_stiffness: 500.0
+    normal_damping: 1.0
+    normal_exponent: 1.2
+    shear_scalar: 2.0
+    twist_scalar: 2.0
+    debug_probe_color:
+    - 0.4
+    - 0.7
+    - 1.0
+    debug_contact_color:
+    - 1.0
+    - 0.4
+    - 0.4
+  imperfections:
+    clean: {}
+    mild:
+      noise: 0.00125
+      random_walk: 0.0005
+      bias: 0.0025
+      resolution: 0.0025
+      probe_radius_noise: 7.5e-05
+      dead_taxel_probability: 0.01
+      probe_gain_resample_range:
+      - 0.95
+      - 1.05
+      hysteresis_strength: 0.05
+      hysteresis_tau: 0.05
+    strong:
+      noise: 0.005
+      random_walk: 0.002
+      bias: 0.01
+      resolution: 0.01
+      probe_radius_noise: 0.0003
+      dead_taxel_probability: 0.05
+      probe_gain_resample_range: &id003
+      - 0.85
+      - 1.15
+      hysteresis_strength: 0.25
+      hysteresis_tau: 0.15
+force_torque:
+  torque_reference_length_m: 0.001 # 1 mm reference lever arm: N -> N m
+  params: *id002
+  imperfections:
+    clean: {}
+    mild:
+      noise: 0.00125
+      random_walk: 0.0005
+      bias: 0.0025
+      resolution: 0.0025
+      probe_radius_noise: 7.5e-05
+      dead_taxel_probability: 0.01
+      probe_gain_resample_range:
+      - 0.95
+      - 1.05
+      hysteresis_strength: 0.05
+      hysteresis_tau: 0.05
+    strong:
+      noise: 0.005
+      random_walk: 0.002
+      bias: 0.01
+      resolution: 0.01
+      probe_radius_noise: 0.0003
+      dead_taxel_probability: 0.05
+      probe_gain_resample_range: *id003
+      hysteresis_strength: 0.25
+      hysteresis_tau: 0.15
+proximity:
+  torque_reference_length_m: 0.001 # 1 mm reference lever arm: N -> N m
+  params:
+    probe_radius: 0.01
+    n_sample_points: 1000
+    stiffness: 300.0
+    shear_coupling: 10.0
+    debug_point_cloud_radius: 0.001
+    debug_point_cloud_color:
+    - 1.0
+    - 0.8
+    - 0.0
+    - 0.3
+    debug_probe_color:
+    - 0.4
+    - 0.7
+    - 1.0
+    debug_probe_sphere_opacity: 0.1
+    debug_contact_color:
+    - 1.0
+    - 0.4
+    - 0.4
+  imperfections:
+    clean: {}
+    mild:
+      noise: 0.0025
+      random_walk: 0.00025
+      resolution: 0.0025
+      probe_radius_noise: 0.00015
+      dead_taxel_probability: 0.01
+      probe_gain_resample_range:
+      - 0.95
+      - 1.05
+      hysteresis_strength: 0.05
+      hysteresis_tau: 0.05
+    strong:
+      noise: 0.01
+      random_walk: 0.001
+      resolution: 0.01
+      probe_radius_noise: 0.0006
+      dead_taxel_probability: 0.05
+      probe_gain_resample_range:
+      - 0.85
+      - 1.15
+      hysteresis_strength: 0.25
+      hysteresis_tau: 0.15
+elastomer:
+  params:
+    n_sample_points: 1000
+    lambda_d: 8000.0
+    lambda_s: 2000.0
+    dilate_scale: 100.0
+    shear_scale: 200.0
+    normal_exponent: 1.2
+    debug_point_cloud_radius: 0.001
+    debug_point_cloud_color:
+    - 1.0
+    - 0.8
+    - 0.0
+    - 0.3
+    debug_probe_color:
+    - 0.4
+    - 0.7
+    - 1.0
+    debug_contact_color:
+    - 1.0
+    - 0.4
+    - 0.4
+  imperfections:
+    clean: {}
+    mild:
+      noise: 2.5e-05
+      random_walk: 2.5e-06
+      resolution: 2.5e-05
+      probe_radius_noise: 7.5e-05
+      dead_taxel_probability: 0.01
+      probe_gain_resample_range:
+      - 0.95
+      - 1.05
+      hysteresis_strength: 0.05
+      hysteresis_tau: 0.05
+    strong:
+      noise: 0.0001
+      random_walk: 1.0e-05
+      resolution: 0.0001
+      probe_radius_noise: 0.0003
+      dead_taxel_probability: 0.05
+      probe_gain_resample_range:
+      - 0.85
+      - 1.15
+      hysteresis_strength: 0.25
+      hysteresis_tau: 0.15

@@ -1,0 +1,109 @@
+diff --git a/Eden/eden/envs/base.py b/Eden/eden/envs/base.py
+index 565354b..e695243 100644
+--- a/Eden/eden/envs/base.py
++++ b/Eden/eden/envs/base.py
+@@ -209,14 +209,14 @@ class EnvBase(DrawDebugMixin, RBC):
+                 requires_grad=env_options.requires_grad,
+             ),
+             viewer_options=gs.options.ViewerOptions(
+-                max_FPS=int(1 / env_options.sim_dt),
++                refresh_rate=int(1 / env_options.sim_dt),
+                 camera_pos=(2.0, 0.0, 2.5),
+                 camera_lookat=(0.0, 0.0, 0.5),
+                 camera_fov=40,
+                 enable_default_keybinds=env_options.enable_default_keybinds,
+             ),
+             vis_options=gs.options.VisOptions(
+-                env_separate_rigid=env_options.env_separate_rigid,
++                split_envs=env_options.env_separate_rigid,
+                 show_link_frame=env_options.show_link_frame,
+                 show_world_frame=env_options.show_world_frame,
+                 show_cameras=env_options.show_camera_frustums,
+@@ -265,7 +265,12 @@ class EnvBase(DrawDebugMixin, RBC):
+         extras = env_options.__pydantic_extra__ or {}
+         internal_keys = {"_option_module_", "_option_class_"}
+         for key, value in extras.items():
+-            if key not in internal_keys:
++            if key in ("friction_cone", "contact_resolution"):
++                # The pinned task registry puts these solver options in EnvOptions
++                # extras. They belong to RigidOptions, not the Scene constructor.
++                enum_type = getattr(gs, key)
++                setattr(scene_kwargs["rigid_options"], key, getattr(enum_type, value) if isinstance(value, str) else value)
++            elif key not in internal_keys:
+                 scene_kwargs[key] = value
+ 
+         # Explicit kwargs take highest priority
+diff --git a/Eden/eden/managers/termination_manager.py b/Eden/eden/managers/termination_manager.py
+index ee18bbb..153ffe3 100644
+--- a/Eden/eden/managers/termination_manager.py
++++ b/Eden/eden/managers/termination_manager.py
+@@ -100,6 +100,10 @@ class TerminationManager(ManagerBase[TerminationManagerOptions]):
+     def get_term(self, name: str) -> torch.Tensor:
+         return self._term_dones[name]
+ 
++    def get_term_dones(self, name: str) -> torch.Tensor:
++        """Compatibility accessor used by the pinned task's termination penalty."""
++        return self._term_dones[name]
++
+     def _prepare_terms(self):
+         self._terms: dict[str, TerminationTermLike] = dict()
+         self._reset_terms: list[TerminationTerm] = []
+diff --git a/Eden/eden/utils/geom.py b/Eden/eden/utils/geom.py
+index 56d1d1e..834ea51 100644
+--- a/Eden/eden/utils/geom.py
++++ b/Eden/eden/utils/geom.py
+@@ -8,11 +8,34 @@ from genesis.utils.geom import (
+     R_to_rot6d,
+     transform_by_quat,
+     normalize,
++    inv_quat,
++    transform_quat_by_quat,
+ )
+ import numpy as np
+ import torch
+ 
+ 
++# Compatibility exports required by the tactile-genesis task snapshot.
++def quat_mul(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
++    """Hamilton product of unit wxyz quaternions: R(a) @ R(b)."""
++    return transform_quat_by_quat(b, a)
++
++
++def axis_angle_from_quat(quat: torch.Tensor) -> torch.Tensor:
++    """Shortest rotation vector of a wxyz quaternion, stable near identity."""
++    q = torch.nn.functional.normalize(quat, dim=-1)
++    q = torch.where(q[..., :1] < 0, -q, q)
++    sine = torch.linalg.vector_norm(q[..., 1:], dim=-1, keepdim=True)
++    angle = 2.0 * torch.atan2(sine, q[..., :1])
++    scale = torch.where(sine > 1e-6, angle / sine.clamp_min(1e-12), 2.0 + sine.square() / 3.0)
++    return q[..., 1:] * scale
++
++
++def quat_error_magnitude(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
++    """Shortest angular separation in radians, invariant to quaternion sign."""
++    return torch.linalg.vector_norm(axis_angle_from_quat(quat_mul(a, inv_quat(b))), dim=-1)
++
++
+ def align_up_to_z(up, as_torch=False):
+     """
+     Aligns the given 'up' vector to the Z-up direction (0, 0, 1).
+diff --git a/Eden/eden/managers/terms/utils.py b/Eden/eden/managers/terms/utils.py
+new file mode 100644
+index 0000000..42560cf
+--- /dev/null
++++ b/Eden/eden/managers/terms/utils.py
+@@ -0,0 +1,14 @@
++"""Joint-limit utility missing from the vendored tactile-genesis snapshot."""
++
++import torch
++
++
++def soft_dof_pos_violation(dofs_pos: torch.Tensor, limits: torch.Tensor) -> torch.Tensor:
++    """Return per-DOF distance outside the supplied [lower, upper] band.
++
++    ``limits`` has trailing shape ``(n_dofs, 2)``; leading batch dimensions
++    broadcast against ``dofs_pos``. Values inside the band have zero penalty.
++    """
++    return torch.clamp(limits[..., 0] - dofs_pos, min=0.0) + torch.clamp(
++        dofs_pos - limits[..., 1], min=0.0
++    )

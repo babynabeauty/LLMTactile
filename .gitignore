@@ -1,0 +1,96 @@
+# macOS
+.DS_Store
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Tooling caches
+.ruff_cache/
+.pytest_cache/
+.mypy_cache/
+
+# Environments
+.venv/
+.env
+
+# Editors
+.vscode/
+.idea/
+
+# Experiment outputs
+logs/
+runs/
+outputs/
+wandb/
+
+# Local execution state and experiment demonstration artifacts
+**/runtime/
+**/source_snapshot/
+**/codex_inputs/
+experiments/**/demo/
+experiments/**/demo_original_*/
+**/data/
+**/datasets/
+**/checkpoints/
+**/weights/
+**/node_modules/
+**/build/
+**/dist/
+
+# Credentials and local environment files
+.env.*
+!.env.example
+!**/.env.example
+**/auth.json
+**/credentials.json
+**/credentials.yaml
+*.pem
+*.key
+
+# Recorded trajectories, arrays, model weights and archives
+*.jsonl
+*.npz
+*.npy
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.pkl
+*.pickle
+*.zip
+*.tar
+*.gz
+*.7z
+*.log
+
+# Media and simulation resources (kept locally, not in code-only upload)
+*.mp4
+*.webm
+*.avi
+*.mov
+*.gif
+*.png
+*.jpg
+*.jpeg
+*.pdf
+*.stl
+*.STL
+*.obj
+*.dae
+*.glb
+*.gltf
+*.ply
+*.ttf
+*.woff
+*.woff2
+*.so
+*.dll
+*.dylib
+Genesis/genesis/ext/VolumeSampling
+
+# Large bundled data files
+/Genesis/genesis/ext/VolumeSampling
+/docs/static/data/hands/allegro.json

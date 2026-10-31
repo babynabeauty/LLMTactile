@@ -1,0 +1,14 @@
+{
+  "python": "3.12.3",
+  "os": "Linux-7.0.0-38-generic-x86_64-with-glibc2.39",
+  "local_packages": {
+    "torch": "2.10.0+cu128",
+    "genesis-world": "1.4.1",
+    "torchvision": "0.25.0+cu128",
+    "rsl-rl-lib": "5.0.1",
+    "eden": "0.1.0",
+    "tactile_genesis": "0.1.0"
+  },
+  "git_commit": "4777fd5da08244acbc677dca6f6f9acfb2d69d2b",
+  "gpu": "NVIDIA GeForce RTX 5090, 580.178.04, 32607 MiB"
+}

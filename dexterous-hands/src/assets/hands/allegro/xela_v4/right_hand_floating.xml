@@ -1,0 +1,257 @@
+<mujoco model="allegro_xela_v4_right">
+  <compiler angle="radian" meshdir="mesh" autolimits="true" fusestatic="false" inertiafromgeom="false" />
+  <default>
+    <joint damping="0.1" armature="0" />
+    <position kp="1" kv="0" />
+  </default>
+  <asset>
+    <mesh name="mesh_0" file="allegro/base.stl" scale="1 1 1" />
+    <mesh name="mesh_1" file="4x6.stl" scale="1 1 1" />
+    <mesh name="mesh_2" file="allegro/link_0.0_ext.STL" scale="1 1 1" />
+    <mesh name="mesh_3" file="allegro/link_1.0.stl" scale="1 1 1" />
+    <mesh name="mesh_4" file="allegro/link_1_cover.stl" scale="1 1 1" />
+    <mesh name="mesh_5" file="4x4.stl" scale="1 1 1" />
+    <mesh name="mesh_6" file="allegro/link_2.0.stl" scale="1 1 1" />
+    <mesh name="mesh_7" file="allegro/link_2_cover.stl" scale="1 1 1" />
+    <mesh name="mesh_8" file="allegro/link_3.0.STL" scale="1 1 1" />
+    <mesh name="mesh_9" file="ft_c.stl" scale="1 1 1" />
+    <mesh name="mesh_10" file="allegro/link_12.0_right.STL" scale="1 1 1" />
+    <mesh name="mesh_11" file="allegro/thumb_1_cover.stl" scale="1 1 1" />
+    <mesh name="mesh_12" file="allegro/thumb_1.0.stl" scale="1 1 1" />
+    <mesh name="mesh_13" file="allegro/thumb_2_cover.stl" scale="1 1 1" />
+    <mesh name="mesh_14" file="allegro/thumb_2.0.stl" scale="1 1 1" />
+  </asset>
+  <worldbody>
+    <body name="base_link" pos="0.0 0.0 0.0" quat="1 0 0 0">
+      <freejoint name="floating_wrist"/>
+      <inertial pos="0 0 0" mass="0.4288" fullinertia="0.00204 0.00123 0.00125 8.579999999999999e-06 8.579999999999999e-06 0" />
+      <geom pos="0 0 0 " quat="1 0 0 0" name="base_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_0" />
+      <geom pos="-0.009300 0 -0.0475" quat="1 0 0 0" name="base_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0204 0.0565 0.0475" />
+      <body name="ahr_palm_1_4x6_palm_link" pos="0.013 -0.051 -0.0365" quat="0.5000000000000001 0.5 0.4999999999999999 0.5">
+        <geom pos="0 0 0" quat="1 0 0 0" name="ahr_palm_1_4x6_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_1" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="ahr_palm_1_4x6_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_1" />
+      </body>
+      <body name="ahr_palm_2_4x6_palm_link" pos="0.013 0.0523 -0.005" quat="0.4999999999999999 -0.4999999999999999 0.5000000000000001 -0.4999999999999999">
+        <geom pos="0 0 0" quat="1 0 0 0" name="ahr_palm_2_4x6_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_1" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="ahr_palm_2_4x6_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_1" />
+      </body>
+      <body name="ahr_palm_3_4x6_palm_link" pos="0.013 -0.051 -0.068" quat="0.5000000000000001 0.5 0.4999999999999999 0.5">
+        <geom pos="0 0 0" quat="1 0 0 0" name="ahr_palm_3_4x6_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_1" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="ahr_palm_3_4x6_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_1" />
+      </body>
+      <body name="index_0" pos="0 0.0435 -0.001542" quat="0.9990482215818578 -0.043619387365336 0 0">
+        <joint name="index_roll" type="hinge" axis="0 0 1" range="-0.47 0.47" />
+        <inertial pos="0 0 0" mass="0.0127" fullinertia="1.38e-07 6.83e-08 1.16e-07 1.27e-10 4.83e-09 0" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="index_0_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 1.0" type="mesh" mesh="mesh_2" />
+        <geom pos="0 0 0.011200000000000002" quat="1 0 0 0" name="index_0_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0082" />
+        <body name="index_1" pos="0 0 0.0189" quat="1 0 0 0">
+          <joint name="index_bend0" type="hinge" axis="0 1 0" range="-0.19599999999999998 1.6099999999999999" />
+          <inertial pos="0 0 0" mass="0.0809" fullinertia="1.75e-05 1.8e-05 4.6e-06 0 5.66e-08 0" />
+          <geom pos="0 0 0" quat="1 0 0 0" name="index_1_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_3" />
+          <geom pos="0 0 0.0082" quat="1 0 0 0" name="index_1_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0082" />
+          <body name="index_1_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+            <geom pos="0 0 0" quat="1 0 0 0" name="index_1_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_4" />
+            <geom pos="0 0 0.00885" quat="1 0 0 0" name="index_1_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_4" />
+          </body>
+          <body name="index_1A_4x4_palm_link" pos="0.0108 0.012 0.033" quat="4.329780281177467e-17 0.7071067811865475 -4.329780281177466e-17 0.7071067811865476">
+            <geom pos="0 0 0" quat="1 0 0 0" name="index_1A_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="index_1A_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+          </body>
+          <body name="index_1B_4x4_palm_link" pos="0.0108 -0.012 0.021" quat="0.7071067811865476 0 0.7071067811865475 0">
+            <geom pos="0 0 0" quat="1 0 0 0" name="index_1B_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="index_1B_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+          </body>
+          <body name="index_2" pos="0 0 0.054" quat="1 0 0 0">
+            <joint name="index_bend1" type="hinge" axis="0 1 0" range="-0.17400000000000002 1.7089999999999999" />
+            <inertial pos="0 0 0" mass="0.0447" fullinertia="3.8e-07 2.26e-07 1.86e-07 0 7.15e-09 1.34e-09" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="index_2_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_6" />
+            <geom pos="0 0 0.027" quat="1 0 0 0" name="index_2_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.027" />
+            <body name="index_2_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="index_2_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_7" />
+              <geom pos="0 0 0.0257" quat="1 0 0 0" name="index_2_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_7" />
+            </body>
+            <body name="index_2_4x4_palm_link" pos="0.01 -0.012 0.0445" quat="0.7071067811865476 0 0.7071067811865475 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="index_2_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="index_2_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+            </body>
+            <body name="index_3" pos="0 0.0 0.0384" quat="1 0 0 0">
+              <joint name="index_bend2" type="hinge" axis="0 1 0" range="-0.227 1.6179999999999999" />
+              <inertial pos="0 0 0" mass="0.0404" fullinertia="3.64e-06 3.33e-06 1.92e-06 0 0 0" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="index_3_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_8" />
+              <geom pos="0 0 0.013199999999999998" quat="1 0 0 0" name="index_3_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.013199999999999998" />
+              <body name="index_3_tip" pos="-0.013 0.0 0.016" quat="0.5000000000000001 0.5 0.4999999999999999 0.5">
+                <geom pos="0 0 0" quat="1 0 0 0" name="index_3_tip_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_9" />
+                <geom pos="0 0 0" quat="1 0 0 0" name="index_3_tip_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_9" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="middle_0" pos="0 0 0.0007" quat="1 0 0 0">
+        <joint name="middle_roll" type="hinge" axis="0 0 1" range="-0.47 0.47" />
+        <inertial pos="0 0 0" mass="0.0127" fullinertia="1.38e-07 6.83e-08 1.16e-07 1.27e-10 4.83e-09 0" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="middle_0_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 1.0" type="mesh" mesh="mesh_2" />
+        <geom pos="0 0 0.011200000000000002" quat="1 0 0 0" name="middle_0_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0082" />
+        <body name="middle_1" pos="0 0 0.0189" quat="1 0 0 0">
+          <joint name="middle_bend0" type="hinge" axis="0 1 0" range="-0.19599999999999998 1.6099999999999999" />
+          <inertial pos="0 0 0" mass="0.0809" fullinertia="1.75e-05 1.8e-05 4.6e-06 0 5.66e-08 0" />
+          <geom pos="0 0 0" quat="1 0 0 0" name="middle_1_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_3" />
+          <geom pos="0 0 0.0082" quat="1 0 0 0" name="middle_1_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0082" />
+          <body name="middle_1_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+            <geom pos="0 0 0" quat="1 0 0 0" name="middle_1_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_4" />
+            <geom pos="0 0 0.00885" quat="1 0 0 0" name="middle_1_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_4" />
+          </body>
+          <body name="middle_1A_4x4_palm_link" pos="0.0108 0.012 0.033" quat="4.329780281177467e-17 0.7071067811865475 -4.329780281177466e-17 0.7071067811865476">
+            <geom pos="0 0 0" quat="1 0 0 0" name="middle_1A_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="middle_1A_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+          </body>
+          <body name="middle_1B_4x4_palm_link" pos="0.0108 -0.012 0.021" quat="0.7071067811865476 0 0.7071067811865475 0">
+            <geom pos="0 0 0" quat="1 0 0 0" name="middle_1B_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="middle_1B_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+          </body>
+          <body name="middle_2" pos="0 0 0.054" quat="1 0 0 0">
+            <joint name="middle_bend1" type="hinge" axis="0 1 0" range="-0.17400000000000002 1.7089999999999999" />
+            <inertial pos="0 0 0" mass="0.0447" fullinertia="3.8e-07 2.26e-07 1.86e-07 0 7.15e-09 1.34e-09" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="middle_2_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_6" />
+            <geom pos="0 0 0.027" quat="1 0 0 0" name="middle_2_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.027" />
+            <body name="middle_2_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="middle_2_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_7" />
+              <geom pos="0 0 0.0257" quat="1 0 0 0" name="middle_2_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_7" />
+            </body>
+            <body name="middle_2_4x4_palm_link" pos="0.01 -0.012 0.0445" quat="0.7071067811865476 0 0.7071067811865475 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="middle_2_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="middle_2_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+            </body>
+            <body name="middle_3" pos="0 0.0 0.0384" quat="1 0 0 0">
+              <joint name="middle_bend2" type="hinge" axis="0 1 0" range="-0.227 1.6179999999999999" />
+              <inertial pos="0 0 0" mass="0.0404" fullinertia="3.64e-06 3.33e-06 1.92e-06 0 0 0" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="middle_3_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_8" />
+              <geom pos="0 0 0.013199999999999998" quat="1 0 0 0" name="middle_3_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.013199999999999998" />
+              <body name="middle_3_tip" pos="-0.013 0.0 0.016" quat="0.5000000000000001 0.5 0.4999999999999999 0.5">
+                <geom pos="0 0 0" quat="1 0 0 0" name="middle_3_tip_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_9" />
+                <geom pos="0 0 0" quat="1 0 0 0" name="middle_3_tip_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_9" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="ring_0" pos="0 -0.0435 -0.001542" quat="0.9990482215818578 0.043619387365336 0 0">
+        <joint name="ring_roll" type="hinge" axis="0 0 1" range="-0.47 0.47" />
+        <inertial pos="0 0 0" mass="0.0127" fullinertia="1.38e-07 6.83e-08 1.16e-07 1.27e-10 4.83e-09 0" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="ring_0_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 1.0" type="mesh" mesh="mesh_2" />
+        <geom pos="0 0 0.011200000000000002" quat="1 0 0 0" name="ring_0_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0082" />
+        <body name="ring_1" pos="0 0 0.0189" quat="1 0 0 0">
+          <joint name="ring_bend0" type="hinge" axis="0 1 0" range="-0.19599999999999998 1.6099999999999999" />
+          <inertial pos="0 0 0" mass="0.0809" fullinertia="1.75e-05 1.8e-05 4.6e-06 0 5.66e-08 0" />
+          <geom pos="0 0 0" quat="1 0 0 0" name="ring_1_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_3" />
+          <geom pos="0 0 0.0082" quat="1 0 0 0" name="ring_1_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0082" />
+          <body name="ring_1_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+            <geom pos="0 0 0" quat="1 0 0 0" name="ring_1_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_4" />
+            <geom pos="0 0 0.00885" quat="1 0 0 0" name="ring_1_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_4" />
+          </body>
+          <body name="ring_1A_4x4_palm_link" pos="0.0108 0.012 0.033" quat="4.329780281177467e-17 0.7071067811865475 -4.329780281177466e-17 0.7071067811865476">
+            <geom pos="0 0 0" quat="1 0 0 0" name="ring_1A_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="ring_1A_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+          </body>
+          <body name="ring_1B_4x4_palm_link" pos="0.0108 -0.012 0.021" quat="0.7071067811865476 0 0.7071067811865475 0">
+            <geom pos="0 0 0" quat="1 0 0 0" name="ring_1B_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="ring_1B_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+          </body>
+          <body name="ring_2" pos="0 0 0.054" quat="1 0 0 0">
+            <joint name="ring_bend1" type="hinge" axis="0 1 0" range="-0.17400000000000002 1.7089999999999999" />
+            <inertial pos="0 0 0" mass="0.0447" fullinertia="3.8e-07 2.26e-07 1.86e-07 0 7.15e-09 1.34e-09" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="ring_2_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_6" />
+            <geom pos="0 0 0.027" quat="1 0 0 0" name="ring_2_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.027" />
+            <body name="ring_2_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="ring_2_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_7" />
+              <geom pos="0 0 0.0257" quat="1 0 0 0" name="ring_2_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_7" />
+            </body>
+            <body name="ring_2_4x4_palm_link" pos="0.01 -0.012 0.0445" quat="0.7071067811865476 0 0.7071067811865475 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="ring_2_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="ring_2_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+            </body>
+            <body name="ring_3" pos="0 0.0 0.0384" quat="1 0 0 0">
+              <joint name="ring_bend2" type="hinge" axis="0 1 0" range="-0.227 1.6179999999999999" />
+              <inertial pos="0 0 0" mass="0.0404" fullinertia="3.64e-06 3.33e-06 1.92e-06 0 0 0" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="ring_3_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_8" />
+              <geom pos="0 0 0.013199999999999998" quat="1 0 0 0" name="ring_3_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.013199999999999998" />
+              <body name="ring_3_tip" pos="-0.013 0.0 0.016" quat="0.5000000000000001 0.5 0.4999999999999999 0.5">
+                <geom pos="0 0 0" quat="1 0 0 0" name="ring_3_tip_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_9" />
+                <geom pos="0 0 0" quat="1 0 0 0" name="ring_3_tip_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_9" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+      <body name="thumb_0" pos="-0.0182 0.019333 -0.046487" quat="0.4777144171082609 -0.5213338044735969 -0.5213338044735969 -0.4777144171082608">
+        <joint name="thumb_bend0" type="hinge" axis="-1 0 0" range="0.263 1.396" />
+        <inertial pos="0 0 0" mass="0.0176" fullinertia="3.36e-06 3.84e-06 2.59e-06 0 1.76e-08 2.46e-07" />
+        <geom pos="0 0 0" quat="1 0 0 0" name="thumb_0_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 1.0" type="mesh" mesh="mesh_10" />
+        <geom pos="-0.0179 0.009 0.0145" quat="1 0 0 0" name="thumb_0_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0179 0.017 0.02275" />
+        <body name="thumb_1" pos="-0.027 0.005 0.0399" quat="1 0 0 0">
+          <joint name="thumb_roll" type="hinge" axis="0 0 1" range="-0.10499999999999998 1.1629999999999998" />
+          <inertial pos="0 0 0" mass="0.0127" fullinertia="1.38e-07 6.83e-08 1.16e-07 1.27e-10 4.83e-09 0" />
+          <geom pos="0 0 0" quat="1 0 0 0" name="thumb_1_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 1.0" type="mesh" mesh="mesh_2" />
+          <geom pos="0 0 0.00885" quat="1 0 0 0" name="thumb_1_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.00885" />
+          <body name="thumb_2" pos="0 0 0.019700000000000002" quat="0.9999619230641713 0 -0.008726535498373935 0">
+            <joint name="thumb_bend1" type="hinge" axis="0 1 0" range="-0.18899999999999997 1.644" />
+            <inertial pos="0 0 0" mass="0.0457" fullinertia="3.2e-06 3.03e-06 1.47e-06 9.139999999999999e-09 1.46e-07 0" />
+            <geom pos="0 0 0" quat="1 0 0 0" name="thumb_2_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_12" />
+            <geom pos="0 0 0.0257" quat="1 0 0 0" name="thumb_2_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.0257" />
+            <body name="thumb_2_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="thumb_2_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_11" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="thumb_2_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_11" />
+            </body>
+            <body name="thumb_2_4x4_palm_link" pos="0.011 -0.012 0.023" quat="0.7071067811865476 0 0.7071067811865475 0">
+              <geom pos="0 0 0" quat="1 0 0 0" name="thumb_2_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="thumb_2_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+            </body>
+            <body name="thumb_3" pos="0 0 0.0514" quat="1 0 0 0">
+              <joint name="thumb_bend2" type="hinge" axis="0 1 0" range="-0.162 1.7189999999999999" />
+              <inertial pos="0 0 0" mass="0.0753" fullinertia="2.9e-05 2.9e-05 6.88e-06 0 0 0" />
+              <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.45 0.45 0.45 0.8" type="mesh" mesh="mesh_14" />
+              <geom pos="0 0 0.021150000000000002" quat="1 0 0 0" name="thumb_3_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="box" size="0.0098 0.01375 0.021150000000000002" />
+              <body name="thumb_3_cover" pos="0.0 0.0 0.0" quat="1 0 0 0">
+                <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_cover_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_13" />
+                <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_cover_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_13" />
+              </body>
+              <body name="thumb_3_4x4_palm_link" pos="0.011 -0.012 0.021" quat="0.7071067811865476 0 0.7071067811865475 0">
+                <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_4x4_palm_link_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_5" />
+                <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_4x4_palm_link_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_5" />
+              </body>
+              <body name="thumb_3_tip" pos="-0.013 0.0 0.0315" quat="0.5000000000000001 0.5 0.4999999999999999 0.5">
+                <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_tip_visual_0" mass="0" contype="0" conaffinity="0" group="2" rgba="0.1 0.1 0.1 1.0" type="mesh" mesh="mesh_9" />
+                <geom pos="0 0 0" quat="1 0 0 0" name="thumb_3_tip_collision_0" mass="0" contype="1" conaffinity="1" group="3" rgba=".6 .6 .6 1" type="mesh" mesh="mesh_9" />
+              </body>
+            </body>
+          </body>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+  <actuator>
+    <position name="index_roll_actuator" joint="index_roll" ctrlrange="-0.47 0.47" forcerange="-15 15" />
+    <position name="index_bend0_actuator" joint="index_bend0" ctrlrange="-0.19599999999999998 1.6099999999999999" forcerange="-15 15" />
+    <position name="index_bend1_actuator" joint="index_bend1" ctrlrange="-0.17400000000000002 1.7089999999999999" forcerange="-15 15" />
+    <position name="index_bend2_actuator" joint="index_bend2" ctrlrange="-0.227 1.6179999999999999" forcerange="-15 15" />
+    <position name="middle_roll_actuator" joint="middle_roll" ctrlrange="-0.47 0.47" forcerange="-15 15" />
+    <position name="middle_bend0_actuator" joint="middle_bend0" ctrlrange="-0.19599999999999998 1.6099999999999999" forcerange="-15 15" />
+    <position name="middle_bend1_actuator" joint="middle_bend1" ctrlrange="-0.17400000000000002 1.7089999999999999" forcerange="-15 15" />
+    <position name="middle_bend2_actuator" joint="middle_bend2" ctrlrange="-0.227 1.6179999999999999" forcerange="-15 15" />
+    <position name="ring_roll_actuator" joint="ring_roll" ctrlrange="-0.47 0.47" forcerange="-15 15" />
+    <position name="ring_bend0_actuator" joint="ring_bend0" ctrlrange="-0.19599999999999998 1.6099999999999999" forcerange="-15 15" />
+    <position name="ring_bend1_actuator" joint="ring_bend1" ctrlrange="-0.17400000000000002 1.7089999999999999" forcerange="-15 15" />
+    <position name="ring_bend2_actuator" joint="ring_bend2" ctrlrange="-0.227 1.6179999999999999" forcerange="-15 15" />
+    <position name="thumb_bend0_actuator" joint="thumb_bend0" ctrlrange="0.263 1.396" forcerange="-15 15" />
+    <position name="thumb_roll_actuator" joint="thumb_roll" ctrlrange="-0.10499999999999998 1.1629999999999998" forcerange="-15 15" />
+    <position name="thumb_bend1_actuator" joint="thumb_bend1" ctrlrange="-0.18899999999999997 1.644" forcerange="-15 15" />
+    <position name="thumb_bend2_actuator" joint="thumb_bend2" ctrlrange="-0.162 1.7189999999999999" forcerange="-15 15" />
+  </actuator>
+  <contact>
+    <exclude body1="base_link" body2="index_0" />
+    <exclude body1="base_link" body2="middle_0" />
+    <exclude body1="base_link" body2="ring_0" />
+    <exclude body1="base_link" body2="thumb_0" />
+    <exclude body1="base_link" body2="thumb_1" />
+  </contact>
+</mujoco>

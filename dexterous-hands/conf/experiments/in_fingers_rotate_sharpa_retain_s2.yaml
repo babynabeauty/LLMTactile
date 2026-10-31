@@ -1,0 +1,168 @@
+# S2: bounded retained-rotation reward and zero-action grasp preservation.
+env_options:
+  num_envs: 8192
+runner_options:
+  max_iterations: 1500
+  save_interval: 500
+  seed: 42
+  actor:
+    distribution_cfg:
+      init_std: 0.3
+  algorithm:
+    entropy_coef: 0.0002
+  obs_groups:
+    critic:
+    - goal
+    - priv_proprio
+    - priv_contact
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - perturbation
+    student:
+    - proprio
+    - goal
+    teacher:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - perturbation
+    rnd_state:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    actor:
+    - goal
+    - priv_proprio
+    - priv_obj_state
+    - priv_obj_props
+    - controller
+    - perturbation
+action_options:
+  dofs_pos_controller:
+    name: smooth_pd_controller
+    entity_name: robot
+    dofs_name:
+    - '*'
+    scale_ratio: null
+    reference_source: accumulate
+    observation_version: smooth_teacher_v1
+    offset: 0.0
+    limit_targets: true
+    max_target_velocity: 0.8
+    scale: 0.041666666666666664
+    max_target_acceleration: 8.0
+    ema_alpha: 0.0
+    modifier: null
+    _option_module_: eden.options.managers.actions
+    _option_class_: ActionTermOptions
+    accumulator_hard_limits: true
+observation_options:
+  controller:
+    state:
+      name: controller_state
+      noise: null
+      clip: null
+      scale: 1.0
+      history_length: 0
+      flatten_history_dim: false
+      backfill: true
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+  perturbation:
+    perturbation_active:
+      name: perturbation_active
+      noise: null
+      clip: null
+      scale: 1.0
+      history_length: 0
+      flatten_history_dim: false
+      backfill: true
+      _option_module_: eden.options.managers.observations
+      _option_class_: ObservationTermOptions
+    _option_module_: eden.options.managers.observations
+    _option_class_: ObservationGroupOptions
+event_options:
+  object_pulse:
+    profile: probe
+    name: object_wrench_pulse
+    mode: interval
+    interval_range_s:
+    - 0.025
+    - 0.025
+    is_global_time: false
+    min_step_count_between_reset: 0
+    priority: 0
+    strength: 0.0
+    entity_name: obj
+    draw_envs: []
+    clean_fraction: 0.25
+    _option_module_: eden.options.managers.events
+    _option_class_: EventTermOptions
+reward_options:
+  excess_axial_speed:
+    name: excess_axial_speed
+    range_s: null
+    weight: 0.0
+    tags: []
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  off_axis_speed:
+    name: off_axis_speed
+    range_s: null
+    weight: 0.0
+    tags: []
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  rotation_reward:
+    name: current_rotation_reward
+    weight: 0.0
+  obj_linvel_penalty:
+    weight: 0.0
+  pose_diff_penalty:
+    weight: 0.0
+  torque_penalty:
+    weight: 0.0
+  work_penalty:
+    weight: 0.0
+  joint_limits_penalty:
+    weight: 0.0
+  retained_rotation:
+    name: retained_rotation_reward
+    weight: 1.0
+    _option_module_: eden.options.managers.rewards
+    _option_class_: RewardTermOptions
+  is_dropped:
+    weight: -10.0
+metric_options:
+  joint_velocity:
+    name: smooth_motion_metric
+    quantity: joint_velocity
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  joint_acceleration:
+    name: smooth_motion_metric
+    quantity: joint_acceleration
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  target_velocity:
+    name: smooth_motion_metric
+    quantity: target_velocity
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  action_saturation:
+    name: smooth_motion_metric
+    quantity: action_saturation
+    _option_module_: eden.options.managers.metrics
+    _option_class_: MetricTermOptions
+  objective:
+    params:
+      reward_names:
+      - retained_rotation
+      weights:
+      - 1.0

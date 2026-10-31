@@ -1,0 +1,5 @@
+# Install into the existing simulation .venv; do not replace its CUDA torch.
+# Verified: torch 2.10.0+cu128, numpy 2.3.5, gymnasium 1.4.0.
+# uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl/requirements.txt
+stable-baselines3==2.9.0
+gymnasium==1.4.0
