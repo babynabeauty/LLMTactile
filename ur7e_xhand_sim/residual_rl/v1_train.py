@@ -15,8 +15,10 @@ import json
 import math
 from pathlib import Path
 import random
+import resource
 import subprocess
 import sys
+import time
 import traceback
 
 import numpy as np
@@ -25,7 +27,6 @@ from stable_baselines3 import PPO
 from stable_baselines3.common.callbacks import BaseCallback
 from stable_baselines3.common.logger import HumanOutputFormat, KVWriter, Logger
 from stable_baselines3.common.utils import set_random_seed
-from stable_baselines3.common.vec_env import VecCheckNan
 
 from .adaptive_policy import policy_kwargs
 from .core import ROOT
@@ -114,14 +115,40 @@ class JsonMetricsWriter(KVWriter):
         self.handle.close()
 
 
+def peak_rss_gb():
+    # ru_maxrss is in KiB on Linux, where training runs.
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss/2**20
+
+
 class TrainingCallback(BaseCallback):
-    """episodes.jsonl, periodic checkpoints and status.json with per-scene exposure."""
-    def __init__(self, output, checkpoint_every, object_ids, lanes):
+    """episodes.jsonl, periodic checkpoints and status.json with per-scene exposure and a wall-time split.
+
+    wall_s: physics (Genesis steps and per-tick contact readback), env_other (the rest of each
+    scene's step), policy_and_buffer (inference, observation copies, rollout storage, GAE) and
+    update (PPO update and logging between rollouts).
+    """
+    def __init__(self, output, checkpoint_every, object_ids, lanes, scenes):
         super().__init__()
         self.output, self.checkpoint_every, self.lanes = output, checkpoint_every, lanes
         self.episode_count = self.task_successes = 0
         self.shape_exposure = {name: {'transitions': 0, 'episodes': 0, 'task_successes': 0} for name in object_ids}
         self.handle = (output/'episodes.jsonl').open('w', buffering=1)
+        self.scenes, self.mark = scenes, None
+        self.wall_s = dict(physics=0., env_other=0., policy_and_buffer=0., update=0.)
+
+    def _scene_wall(self):
+        return (sum(s.wall_s['step'] for s in self.scenes), sum(s.wall_s['physics'] for s in self.scenes))
+
+    def _on_rollout_start(self):
+        now = time.perf_counter()
+        if self.mark is not None:
+            self.wall_s['update'] += now-self.mark
+        self.mark, self.scene_mark = now, self._scene_wall()
+
+    def _on_training_end(self):
+        if self.mark is not None:
+            self.wall_s['update'] += time.perf_counter()-self.mark
+            self.mark = None
 
     def _on_training_start(self):
         self.returns = np.zeros(self.training_env.num_envs)
@@ -153,10 +180,17 @@ class TrainingCallback(BaseCallback):
         return True
 
     def _on_rollout_end(self):
+        now = time.perf_counter()
+        step, physics = (a-b for a, b in zip(self._scene_wall(), self.scene_mark))
+        self.wall_s['physics'] += physics
+        self.wall_s['env_other'] += step-physics
+        self.wall_s['policy_and_buffer'] += now-self.mark-step
+        self.mark = now
         self.logger.record('rollout/cumulative_task_success_rate', self.task_successes/max(self.episode_count, 1))
         write_json(self.output/'status.json', {'status': 'running', 'timesteps': self.num_timesteps,
             'completed_episodes': self.episode_count, 'task_successes': self.task_successes,
-            'shape_exposure': self.shape_exposure, 'updated_utc': datetime.now(timezone.utc).isoformat()})
+            'shape_exposure': self.shape_exposure, 'wall_s': self.wall_s, 'peak_rss_gb': peak_rss_gb(),
+            'updated_utc': datetime.now(timezone.utc).isoformat()})
 
 
 def stage_of(experiment, name):
@@ -252,8 +286,8 @@ def run(args, experiment):
         write_json(output/'manifest.json', manifest)
         write_json(output/'status.json', {'status': 'initializing'})
         configure_seed(args.seed)
-        raw = build_environment(experiment, stage, output, seed=args.seed, method=args.method, lanes=lanes)
-        env = VecCheckNan(raw, raise_exception=True, check_inf=True)
+        # No VecCheckNan: the scenes already reject nonfinite actions, tactile, state and physics.
+        env = raw = build_environment(experiment, stage, output, seed=args.seed, method=args.method, lanes=lanes)
         model = make_model(env, settings, args.seed, args.method, resume=args.resume)
         initial = model.num_timesteps
         manifest.update(initial_policy_sha256=weight_digest(model), n_envs=env.num_envs,
@@ -265,14 +299,15 @@ def run(args, experiment):
         model.set_logger(logger)
         (output/'checkpoints').mkdir()
         callback = TrainingCallback(output, int(settings.get('checkpoint_every', 10**12)),
-            [o['object_id'] for o in experiment['objects']], raw.envs[0].num_envs)
+            [o['object_id'] for o in experiment['objects']], raw.envs[0].num_envs, raw.envs)
         model.learn(total_timesteps=requested, callback=callback, reset_num_timesteps=not bool(args.resume),
                     log_interval=1, progress_bar=False)
         model.save(output/'final_model')
         write_json(output/'status.json', {'status': 'completed', 'timesteps': model.num_timesteps,
             'requested_additional_timesteps': requested, 'actual_additional_timesteps': model.num_timesteps-initial,
             'completed_episodes': callback.episode_count, 'task_successes': callback.task_successes,
-            'shape_exposure': callback.shape_exposure, 'final_checkpoint_sha256': sha256(output/'final_model.zip')})
+            'shape_exposure': callback.shape_exposure, 'wall_s': callback.wall_s, 'peak_rss_gb': peak_rss_gb(),
+            'final_checkpoint_sha256': sha256(output/'final_model.zip')})
     except BaseException as exc:
         if model is not None:
             model.save(output/'interrupted_model')

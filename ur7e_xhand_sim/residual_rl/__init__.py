@@ -1,1 +1,1 @@
-"""Simulation-only, 60 Hz tactile / 15 Hz local residual learning."""
+"""Simulation-only, 60 Hz tactile / 60 Hz local residual learning."""

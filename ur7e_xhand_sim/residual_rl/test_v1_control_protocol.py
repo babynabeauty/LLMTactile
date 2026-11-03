@@ -9,7 +9,7 @@ import zipfile
 import numpy as np
 
 from .control_protocol import (V1_RATES, HISTORY_SAMPLES, current_control_protocol,
-    elapsed_feature, migrate_experiment, require_checkpoint_control_compatibility)
+    elapsed_feature, lookahead_feature, migrate_experiment, require_checkpoint_control_compatibility)
 from .core import RateConfig, Trajectory
 from .v1_task import V1Config, limit_residual
 
@@ -67,6 +67,11 @@ class V1ControlProtocolTest(unittest.TestCase):
 
     def test_elapsed_actor_feature_does_not_need_future_duration(self):
         np.testing.assert_allclose(elapsed_feature([0, 1, 5, 10, 20]), [0, .1, .5, 1, 1])
+
+    def test_lookahead_feature_keeps_its_scale_at_any_action_rate(self):
+        # Fastest base closure: .012 rad per 60 Hz tick, four ticks per legacy 15 Hz action.
+        np.testing.assert_allclose(lookahead_feature(np.full(3, .012), 0), .48)
+        np.testing.assert_allclose(lookahead_feature(np.full(3, .048), 0, 1/15), .48)
 
     def test_training_saves_online_contract_in_actual_sb3_checkpoint(self):
         import gymnasium as gym

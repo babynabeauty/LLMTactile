@@ -24,7 +24,8 @@ from stable_baselines3.common.vec_env import VecEnv
 import genesis as gs
 
 from .core import ROOT, hold_success, interval_overlap
-from .control_protocol import V1_RATES, HISTORY_SAMPLES, current_control_protocol, elapsed_feature
+from .control_protocol import (V1_RATES, HISTORY_SAMPLES, current_control_protocol, elapsed_feature,
+    lookahead_feature)
 from .multiobject_geometry import ObjectSpec
 from .solver_profile import normalize_solver_profile, read_solver_readback, validate_solver_readback
 from .tactile_provenance import current_tactile_model
@@ -37,7 +38,7 @@ from platform_asset import build_platform, FLOOR_Z, PLATFORM_POSITION, TABLE_TOP
 
 PREFIX_CONTACT_LIMIT_N = .05
 STATE_FIELDS = ('q_normalized[18]', 'qd_div_3[18]', 'command_minus_q_div_.2[18]',
-    'next_nominal_minus_nominal_div_.1[18]', 'grip_gain_minus_1[1]', f'phase_one_hot{list(PHASES)}',
+    'next_nominal_minus_nominal_div_(1.5rad_s*action_dt)[18]', 'grip_gain_minus_1[1]', f'phase_one_hot{list(PHASES)}',
     'elapsed_since_close_div10_clipped[1]', 'astra_level_one_hot[4]', f'hand_shape_finger_mask{list(FINGERS)}',
     'previous_residual_div_bound[action_joints]')
 REWARD_TERMS = ('progress', 'force', 'break_soft', 'slip', 'residual_change', 'terminal')
@@ -112,6 +113,8 @@ class V1VecEnv(VecEnv):
         self.episode_counter = 0
         self._closed = False
         self._pending_action = None
+        # Wall time inside step_wait; physics covers Genesis steps and the per-tick contact readback.
+        self.wall_s = dict(step=0., physics=0.)
         self._write_protocol()
         self.reset()
 
@@ -502,7 +505,8 @@ class V1VecEnv(VecEnv):
         progress = elapsed_feature((self.lane_tick-self.lane_start)/self.rates.physics_hz)
         level = np.eye(4, dtype=np.float32)[self.astra_level-1]*self.use_level
         state = np.concatenate([(q-self.mid)/self.half, np.clip(qd/3, -10, 10), (self.command-q)/.2,
-            (future-nominal)/.1, (self.gains-1)[:, None], phase, progress[:, None], level,
+            lookahead_feature(future, nominal, self.rates.action_dt), (self.gains-1)[:, None], phase,
+            progress[:, None], level,
             np.repeat(self.finger_mask[None], n, axis=0), self.residual/self.config.residual_bound_rad],
             axis=1).astype(np.float32)
         if not np.isfinite(state).all():
@@ -522,6 +526,7 @@ class V1VecEnv(VecEnv):
     def step_wait(self):
         if self._pending_action is None:
             raise RuntimeError('step_async must be called first')
+        started = time.perf_counter()
         c, n = self.config, self.num_envs
         old = self.residual.copy()
         self.residual = (np.zeros_like(old) if self.fixed_gain is not None
@@ -539,9 +544,12 @@ class V1VecEnv(VecEnv):
         failed = np.zeros(n, dtype=bool)
         reason = np.array(['']*n, dtype=object)
         for sub in range(self.rates.action_stride):
+            tick = time.perf_counter()
             self.scene.step()
             self.lane_tick += 1
+            # The CPU readback also waits for the GPU step to finish.
             region = self.region_normal_force()
+            self.wall_s['physics'] += time.perf_counter()-tick
             self.peak_region = np.maximum(self.peak_region, region.max(-1))
             broken = self.breaks.update(region, self.f_break, ~failed)
             reason[broken] = 'break'
@@ -609,6 +617,7 @@ class V1VecEnv(VecEnv):
             self._reset_lanes(lanes)
             obs = self._obs()
         self._pending_action = None
+        self.wall_s['step'] += time.perf_counter()-started
         return obs, reward.astype(np.float32), done, infos
 
     def _episode_metrics(self, i, success, reason):

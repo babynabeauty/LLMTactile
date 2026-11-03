@@ -10,7 +10,7 @@ import json
 import numpy as np
 
 from residual_rl.control_protocol import (V1_RATES, HISTORY_SAMPLES,
-    current_control_protocol, elapsed_feature, require_checkpoint_control_compatibility)
+    current_control_protocol, elapsed_feature, lookahead_feature, require_checkpoint_control_compatibility)
 from residual_rl.tactile_provenance import require_checkpoint_tactile_compatibility
 from residual_rl.v1_task import (V1Config, FINGERS, PHASES, HAND_SHAPES, hand_shape_joints,
     limit_residual, REGIONS, link_region, opposing_support)
@@ -22,7 +22,7 @@ def actor_state(q, qd, command, nominal, future, lower, upper, gain, phase,
     lower, upper = np.asarray(lower), np.asarray(upper)
     mid, half = (lower+upper)/2, (upper-lower)/2
     value = np.concatenate([(np.asarray(q)-mid)/half, np.clip(np.asarray(qd)/3, -10, 10),
-        (np.asarray(command)-q)/.2, (np.asarray(future)-nominal)/.1, [gain-1],
+        (np.asarray(command)-q)/.2, lookahead_feature(future, nominal), [gain-1],
         [phase == p for p in PHASES], [float(elapsed_feature(elapsed_s))],
         np.eye(4)[astra_level-1]*use_level, finger_mask, np.asarray(residual)/bound]).astype(np.float32)
     if not np.isfinite(value).all():

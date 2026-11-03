@@ -130,6 +130,14 @@ grep -l 'before close' outputs/v1/size_check/*/score.json
 .venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_train --experiment-json outputs/v1/labels/experiment_train.json --dry-run
 ```
 
+先测 60 Hz 的开销：单跑几次 rollout 和更新（12 个 lane 时 30720 步是 5 次）。
+
+```bash
+.venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_train --experiment-json outputs/v1/labels/experiment_train.json --output outputs/v1/cost_check --stage stage1 --total-timesteps 30720
+```
+
+看 `outputs/v1/cost_check/status.json`：`wall_s` 是四项耗时（秒）——`physics` 物理步和接触读取、`env_other` 环境里的其余计算、`policy_and_buffer` 策略推理和 rollout 存储、`update` PPO 更新；`peak_rss_gb` 是峰值内存。怎么据此决定见方案 §11。
+
 ```bash
 .venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_train --experiment-json outputs/v1/labels/experiment_train.json --output outputs/v1/train --suite
 ```

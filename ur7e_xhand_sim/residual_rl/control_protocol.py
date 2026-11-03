@@ -16,9 +16,12 @@ from .core import RateConfig
 
 V1_RATES = RateConfig(physics_hz=300, tactile_hz=60, action_hz=60)
 HISTORY_SAMPLES = 12
-VERSION = 'v1_tactile60_control60_v2'
+VERSION = 'v1_tactile60_control60_v3'
 LEGACY_ACTION_HZ = 15
 RATE_MULTIPLIER = V1_RATES.action_hz // LEGACY_ACTION_HZ
+# Base-plan lookahead is divided by this speed times the action duration: .1 rad at the
+# legacy 15 Hz, .025 rad at 60 Hz, so the fastest base closure reads .48 at either rate.
+LOOKAHEAD_SCALE_RAD_S = 1.5
 
 
 def current_control_protocol():
@@ -26,6 +29,7 @@ def current_control_protocol():
         base_hz=60, base_target_sampling='recorded_command_zero_order_hold_on_integer_ticks',
         history_samples=HISTORY_SAMPLES, history_duration_s=HISTORY_SAMPLES/V1_RATES.tactile_hz,
         state_time_feature='elapsed_since_close_div10_clipped', state_time_scale_s=10.,
+        state_lookahead_feature='(next_nominal-nominal)/(1.5 rad/s*action_dt)',
         takeover='first_close_on_60_hz_grid; reset_pose_with_zero_velocity',
         residual_update='one_inference_per_new_tactile_sample')
 
@@ -35,13 +39,19 @@ def elapsed_feature(elapsed_s):
     return np.clip(np.asarray(elapsed_s)/10., 0., 1.)
 
 
+def lookahead_feature(future, nominal, action_dt=V1_RATES.action_dt):
+    """Next nominal command minus the current one, on the same scale at any action rate."""
+    return (np.asarray(future)-np.asarray(nominal))/(LOOKAHEAD_SCALE_RAD_S*action_dt)
+
+
 def migrate_experiment(experiment):
     """Upgrade unversioned (15 Hz) settings explicitly; reject unknown protocols."""
     result = deepcopy(experiment)
     existing = result.get('control_protocol')
     if existing is not None:
         if existing != current_control_protocol():
-            raise ValueError('Experiment control protocol is incompatible with V1 60 Hz')
+            raise ValueError(f"Experiment control protocol {existing.get('version')} is incompatible with "
+                             f'{VERSION}; rewrite the experiment JSON (v1_label or v1_bases)')
         return result
     training = result.get('training', {})
     for key in ('n_steps', 'batch_size', 'sde_sample_freq', 'checkpoint_every'):
@@ -76,6 +86,7 @@ def require_checkpoint_control_compatibility(checkpoint):
     with zipfile.ZipFile(path) as archive:
         data = json.loads(archive.read('data'))
     if data.get('control_protocol') != current_control_protocol():
-        raise ValueError('Checkpoint control protocol is missing or incompatible with V1 60 Hz; '
-                         'legacy 15 Hz checkpoints require retraining, not resume/evaluation.')
+        raise ValueError(f"Checkpoint control protocol {(data.get('control_protocol') or {}).get('version')} is "
+                         f'missing or incompatible with {VERSION}; such checkpoints require retraining, '
+                         'not resume/evaluation.')
     return data
