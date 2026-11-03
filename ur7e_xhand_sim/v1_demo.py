@@ -24,8 +24,8 @@ from scipy.spatial.transform import Rotation, Slerp
 from environment import Sandbox
 from build_assets import HAND_JOINTS, ARM_JOINTS
 from contact_guard import assess_contacts
-from residual_rl.v1_task import (BASE_MOTION, HAND_SHAPES, hand_shape_joints, link_region, opposing_support,
-                                 scaled_object)
+from residual_rl.v1_task import (BASE_MOTION, HAND_SHAPES, V1Config, hand_shape_joints, link_region,
+                                 opposing_support, scaled_object, score_lift)
 
 VIEWS = ('scene_front', 'scene_left', 'wrist')
 CONTACT_N = .05
@@ -230,23 +230,22 @@ class SpecDemo:
         self.record.close()
         self.eval_record.close()
         hold = [e for e in self.evals if e['phase'] == 'hold'][-180:]
-        lifted = len(hold) == 180 and min(e['bottom_clearance_m'] for e in hold) >= .05 and not self.failed
-        support = bool(hold) and bool(opposing_support(np.stack([object_normals(e) for e in hold]), CONTACT_N).all())
-        # Match V1's 5 mm slip criterion before exporting a demonstration.
-        # A lift can otherwise be marked successful while the object rolls/slips in the grasp.
-        relative = []
+        # Bases need the full 3 s hold; the outcome follows V1 from the first lifting command on,
+        # with the object pose in the wrist frame.
+        samples = []
         for e, line in zip(self.evals, (self.out/'control.jsonl').read_text().splitlines()):
             if e['phase'] not in ('test_lift', 'lift', 'hold'):
                 continue
             observation = json.loads(line)['after']
-            q = np.asarray(observation['wrist_quaternion_wxyz'])
-            rotation = Rotation.from_quat(q[[1, 2, 3, 0]])
-            relative.append(rotation.inv().apply(np.asarray(e['object_position_m'])-
-                                                 observation['wrist_position_m']))
-        max_slip = float(np.linalg.norm(np.asarray(relative)-relative[0], axis=1).max()) if relative else None
-        slip_ok = max_slip is not None and max_slip <= .005
-        score = {'success': bool(lifted and support and slip_ok), 'lifted_and_held': bool(lifted), 'opposing_support_in_hold': support,
-                 'max_slip_m': max_slip, 'slip_within_limit': slip_ok,
+            q, o = np.asarray(observation['wrist_quaternion_wxyz']), np.asarray(e['object_quaternion_wxyz'])
+            wrist = Rotation.from_quat(q[[1, 2, 3, 0]])
+            samples.append((wrist.inv().apply(np.asarray(e['object_position_m'])-observation['wrist_position_m']),
+                (wrist.inv()*Rotation.from_quat(o[[1, 2, 3, 0]])).as_matrix(), e['bottom_clearance_m'],
+                bool(opposing_support(object_normals(e)[None], CONTACT_N)[0]), False))
+        outcome = score_lift(samples, self.sim.control_dt_s, V1Config())
+        score = {'success': bool(outcome['reason'] == 'success' and len(hold) == 180 and not self.failed),
+                 'v1_outcome': outcome['reason'], 'max_slip_m': outcome['slip_m'],
+                 'longest_stable_s': outcome['longest_stable_s'], 'full_hold': len(hold) == 180,
                  'fault': self.failed, 'control_steps': len(self.evals), 'hand_shape': self.hand_shape,
                  'hold_min_bottom_clearance_m': min((e['bottom_clearance_m'] for e in hold), default=None)}
         write(self.out/'score.json', score)

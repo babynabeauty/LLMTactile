@@ -65,7 +65,16 @@ class V1Config:
     break_soft_start: float = .8
     break_consecutive_steps: int = 2
     slip_weight_per_mm: float = 2.
-    slip_fail_m: float = .005
+    # Slip is penalized, not terminal: the hand may tighten after it. Beyond lost_m of palm-frame
+    # displacement the object is no longer held and the episode ends.
+    lost_m: float = .03
+    # Success ends the episode: once at least lift_clearance_m off the table, the object keeps
+    # opposing support and stays within stable_shift_m / stable_rotation_deg of one palm-frame
+    # pose for stable_hold_s.
+    lift_clearance_m: float = .02
+    stable_hold_s: float = 2.
+    stable_shift_m: float = .002
+    stable_rotation_deg: float = 5.
     # Preserve the time integral of normalized squared residual slew speed.
     residual_change_weight: float = .005*15/V1_RATES.action_hz
     success_bonus: float = 25.
@@ -83,6 +92,8 @@ class V1Config:
             raise ValueError('break_consecutive_steps must be a positive integer')
         if self.residual_bound_rad <= 0 or self.residual_rate_rad <= 0:
             raise ValueError('Residual bound and rate must be positive')
+        if self.stable_hold_s <= 0:
+            raise ValueError('stable_hold_s must be positive')
 
 
 @dataclass(frozen=True)
@@ -225,6 +236,73 @@ class SlipTracker:
         increase = np.where(active, np.maximum(moved-self.distance, 0.), 0.)
         self.distance += increase
         return increase
+
+
+def pose_change(reference_position, reference_rotation, position, rotation):
+    """Translation (m) and rotation angle (deg) of object-in-palm poses relative to a reference pose."""
+    shift = np.linalg.norm(np.asarray(position)-np.asarray(reference_position), axis=-1)
+    relative = np.einsum('...ji,...jk->...ik', reference_rotation, rotation)
+    cos = np.clip((np.trace(relative, axis1=-2, axis2=-1)-1)/2, -1., 1.)
+    return shift, np.degrees(np.arccos(cos))
+
+
+class StableHold:
+    """How long the object has stayed still in the hand, per lane.
+
+    An interval runs while the object is at least lift_clearance_m off the table, has opposing
+    support and stays within stable_shift_m / stable_rotation_deg of its palm-frame pose at the
+    interval start; any violation restarts it at the current sample.
+    """
+    def __init__(self, n):
+        self.position = np.zeros((n, 3))
+        self.rotation = np.tile(np.eye(3), (n, 1, 1))
+        self.start = np.full(n, np.nan)
+        self.lifted = np.zeros(n, dtype=bool)
+        self.supported = np.zeros(n, dtype=bool)
+        self.longest = np.zeros(n)
+
+    def reset(self, lanes):
+        self.start[lanes] = np.nan
+        self.lifted[lanes] = self.supported[lanes] = False
+        self.longest[lanes] = 0.
+
+    def update(self, now, clearance, position, rotation, support, active, cfg):
+        """Advance one sample; returns the lanes whose interval has now lasted stable_hold_s."""
+        held = active & (clearance >= cfg.lift_clearance_m)
+        self.lifted |= held
+        held &= support
+        self.supported |= held
+        shift, angle = pose_change(self.position, self.rotation, position, rotation)
+        still = held & ~np.isnan(self.start) & (shift <= cfg.stable_shift_m) & (angle <= cfg.stable_rotation_deg)
+        restart = held & ~still
+        self.position[restart], self.rotation[restart], self.start[restart] = (
+            position[restart], rotation[restart], now[restart])
+        self.start[active & ~held] = np.nan
+        duration = np.where(np.isnan(self.start), 0., now-self.start)
+        self.longest = np.where(active, np.maximum(self.longest, duration), self.longest)
+        return active & (duration >= cfg.stable_hold_s-1e-9)
+
+
+def score_lift(samples, dt, cfg):
+    """Post-hoc V1 outcome of a recorded trial, as V1VecEnv would end it.
+
+    samples: (object-in-palm position m, rotation 3x3, clearance m, opposing support, fault) per
+    control step in time order, from the first lifting command on; the first is the slip
+    reference. A collision or drop decides first; success once the object stayed still for
+    stable_hold_s. Returns reason, slip_m, longest_stable_s and decided_at (sample index or None).
+    """
+    tracker, slip, reference = StableHold(1), 0., None
+    for i, (position, rotation, clearance, support, fault) in enumerate(samples):
+        position = np.asarray(position, float)
+        reference = position if reference is None else reference
+        slip = max(slip, float(np.linalg.norm(position-reference)))
+        reason = ('collision' if fault else 'dropped' if slip > cfg.lost_m else 'success' if tracker.update(
+            np.array([i*dt]), np.array([clearance]), position[None], np.asarray(rotation, float)[None],
+            np.array([bool(support)]), np.ones(1, dtype=bool), cfg)[0] else None)
+        if reason:
+            return dict(reason=reason, slip_m=slip, longest_stable_s=float(tracker.longest[0]), decided_at=i)
+    reason = 'not_lifted' if not tracker.lifted[0] else 'no_opposing_support' if not tracker.supported[0] else 'unstable'
+    return dict(reason=reason, slip_m=slip, longest_stable_s=float(tracker.longest[0]), decided_at=None)
 
 
 def opposing_support(region_normal_N, threshold_N):

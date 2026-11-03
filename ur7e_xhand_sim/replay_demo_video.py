@@ -14,7 +14,7 @@ from scipy.spatial.transform import Rotation
 
 from environment import Sandbox
 from v1_demo import object_normals, sha
-from residual_rl.v1_task import hand_shape_joints, opposing_support
+from residual_rl.v1_task import V1Config, hand_shape_joints, opposing_support, score_lift
 from contact_guard import assess_contacts
 
 
@@ -34,7 +34,7 @@ def main():
     sim.cube.set_quat(demo['object_initial_quaternion_wxyz'],zero_velocity=True)
     gain_indices=np.asarray(hand_shape_joints(demo['hand_shape']))+6
     rows=[json.loads(line) for line in trajectory.open()]
-    evaluations=[];gain=None;anchor=None;max_slip=0.;pre_force=0.;faults=[]
+    evaluations=[];gain=None;anchor=None;max_slip=0.;pre_force=0.;faults=[];samples=[]
     video=args.output/'replay.mp4'
     writer=imageio.get_writer(video,fps=10,codec='libx264',quality=8,macro_block_size=1)
     try:
@@ -54,6 +54,10 @@ def main():
             if phase in ('settle','preshape','approach','align'):pre_force=max(pre_force,float(forces[:6].sum()))
             guard=assess_contacts(e['solver_contacts'],5.)
             if guard['stop']:faults.append({'step':i+1,'reason':guard['reason']})
+            if anchor is not None:
+                o=np.asarray(e['object_quaternion_wxyz'])
+                samples.append((relative,R.T@Rotation.from_quat(o[[1,2,3,0]]).as_matrix(),e['bottom_clearance_m'],
+                    bool(opposing_support(forces[None],.05)[0]),bool(guard['stop'])))
             evaluations.append({'step':i+1,'phase':phase,'bottom_clearance_m':e['bottom_clearance_m'],
                 'region_normal_N':forces.tolist(),'slip_m':max_slip,'object_position_m':e['object_position_m']})
             if i%6==0 or i==len(rows)-1:
@@ -76,14 +80,15 @@ def main():
     finally:
         writer.close()
         sim.scene.destroy()
+    # Same rules as v1_demo: full 3 s hold, V1 outcome from the first lifting command on.
     hold=[e for e in evaluations if e['phase']=='hold'][-180:]
     f=np.array([e['region_normal_N'] for e in hold])
-    lifted=len(hold)==180 and min(e['bottom_clearance_m'] for e in hold)>=.05
-    support=bool(len(hold)) and bool(opposing_support(f,.05).all())
-    summary={'success':bool(lifted and support and pre_force<=.05 and max_slip<=.005 and not faults),
+    outcome=score_lift(samples,1/60,V1Config())
+    summary={'success':bool(outcome['reason']=='success' and len(hold)==180 and pre_force<=.05 and not faults),
+        'v1_outcome':outcome['reason'],'longest_stable_s':outcome['longest_stable_s'],
         'hand_shape':demo['hand_shape'],'trajectory_sha256':sha(trajectory),'control_steps':len(rows),
         'preclose_max_object_normal_N':pre_force,'hold_min_clearance_m':min((e['bottom_clearance_m'] for e in hold),default=None),
-        'hold_opposing_support':support,'max_slip_m':max_slip,'faults':faults,
+        'max_slip_m':max_slip,'faults':faults,
         'hold_mean_region_normal_N':f.mean(0).tolist() if len(f) else [],
         'hold_contact_fraction_by_region':(f>.05).mean(0).tolist() if len(f) else [],
         'region_order':['thumb','index','middle','ring','pinky','palm','arm'],

@@ -16,7 +16,7 @@ from .tactile_provenance import require_checkpoint_tactile_compatibility
 from .v1_task import episode_specs
 
 DEFAULT_MATERIALS = [[m, u] for m in (.08, .12, .18) for u in (.3, .45, .7)]
-FAILURES = ('break', 'slip', 'collision', 'no_opposing_support', 'hold_failed')
+FAILURES = ('break', 'dropped', 'collision', 'not_lifted', 'no_opposing_support', 'unstable')
 
 
 def run_episodes(env, act):

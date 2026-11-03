@@ -96,9 +96,9 @@ def label_group(runs, demo, output, lanes, seed):
         for i, b in enumerate(replayable):
             row, result = labels[b.base_id], replay[i]
             row['zero_residual'] = result
-            # Slip, missing support and breakage are stricter v1 criteria, not replay errors.
+            # Instability, missing support and breakage are stricter v1 criteria, not replay errors.
             if collected[b.base_id] != result['success'] and (
-                    not collected[b.base_id] or result['termination_reason'] in ('hold_failed', 'collision')):
+                    not collected[b.base_id] or result['termination_reason'] in ('not_lifted', 'dropped', 'collision')):
                 row.update(usable=False, reason=f"replay differs from collection ({result['termination_reason']})")
             elif result['success']:
                 row['label'] = 'S'

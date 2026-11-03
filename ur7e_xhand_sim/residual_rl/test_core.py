@@ -6,7 +6,7 @@ import unittest
 
 import numpy as np
 
-from .core import RateConfig, Trajectory, hold_success, interval_overlap
+from .core import RateConfig, Trajectory, interval_overlap
 
 
 class TestCadence(unittest.TestCase):
@@ -90,20 +90,6 @@ class TestOutcome(unittest.TestCase):
                           (28, np.inf, 28.875, 31.875)]:
             with self.subTest(endpoints=endpoints), self.assertRaises(ValueError):
                 interval_overlap(*endpoints)
-
-    def test_hold_requires_full_duration_and_never_timeout_alone(self):
-        self.assertFalse(hold_success(0, .1))
-        self.assertFalse(hold_success(2.999, .1))
-        self.assertFalse(hold_success(100, 0))
-        self.assertTrue(hold_success(3, .05))
-
-    def test_disconnected_success_intervals_cannot_hide_a_drop(self):
-        # An episode with 2 s good + a dip + 2 s good cannot be converted to
-        # a successful 4 s hold: the interval minimum carries the violation.
-        self.assertFalse(hold_success(4, .049))
-        self.assertFalse(hold_success(3, .08, fault=True))
-        np.testing.assert_array_equal(hold_success([3, 3, 2.5], [.06, .01, .08]),
-                                      [True, False, False])
 
 
 if __name__ == '__main__':

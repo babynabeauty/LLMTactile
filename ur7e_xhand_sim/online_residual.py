@@ -13,7 +13,7 @@ from residual_rl.control_protocol import (V1_RATES, HISTORY_SAMPLES,
     current_control_protocol, elapsed_feature, lookahead_feature, require_checkpoint_control_compatibility)
 from residual_rl.tactile_provenance import require_checkpoint_tactile_compatibility
 from residual_rl.v1_task import (V1Config, FINGERS, PHASES, HAND_SHAPES, hand_shape_joints,
-    limit_residual, REGIONS, link_region, opposing_support)
+    limit_residual, REGIONS, link_region, opposing_support, score_lift)
 
 
 def actor_state(q, qd, command, nominal, future, lower, upper, gain, phase,
@@ -156,7 +156,7 @@ def strict_online_metrics(control_path, evaluations, control_dt_s, config, fault
     """Post-run rigid-body checks; privileged evidence never enters the actor.
 
     The online Sandbox has no fragility sampler/breakage monitor. These results
-    therefore cover slip, clearance and opposing support only, and say so.
+    therefore cover collisions, drops and the stable hold only, and say so.
     """
     from scipy.spatial.transform import Rotation
     observations = {}
@@ -164,23 +164,11 @@ def strict_online_metrics(control_path, evaluations, control_dt_s, config, fault
         for line in stream:
             row = json.loads(line)
             observations[row['step']] = row['observation']
-    samples = round(3/control_dt_s)
-    hold = [e for e in evaluations if e['phase'] == 'hold'][-samples:]
-    hold_steps = {e['step'] for e in hold}
-    reference, previous_relative, max_slip, peak_region = None, None, 0., 0.
-    support_ok, collision = True, bool(fault)
+    samples, previous, peak_region, early_fault = [], None, 0., bool(fault)
     for e in evaluations:
         o = observations[e['step']]
-        q = np.asarray(o['wrist_quaternion_wxyz'])
-        rotation = Rotation.from_quat(q[[1, 2, 3, 0]]).as_matrix()
-        relative = rotation.T@(np.asarray(e['object_position_m'])-o['wrist_position_m'])
-        if reference is None and e['phase'] == 'test_lift':
-            # V1 begins tracking at the command boundary, before its first lift
-            # interval. The preceding recorded post-step state is that boundary.
-            reference = relative if previous_relative is None else previous_relative
-        if reference is not None:
-            max_slip = max(max_slip, float(np.linalg.norm(relative-reference)))
-        previous_relative = relative
+        q, object_q = np.asarray(o['wrist_quaternion_wxyz']), np.asarray(e['object_quaternion_wxyz'])
+        wrist = Rotation.from_quat(q[[1, 2, 3, 0]])
         region = np.zeros(len(REGIONS))
         for contact in e['solver_contacts']:
             entity_a, entity_b = contact['entity_a'], contact['entity_b']
@@ -191,21 +179,28 @@ def strict_online_metrics(control_path, evaluations, control_dt_s, config, fault
                 if index >= 0:
                     region[index] += contact['normal_force_N']
         peak_region = max(peak_region, float(region.max()))
-        if e['step'] in hold_steps:
-            support_ok &= bool(opposing_support(region[None], config.support_threshold_N)[0])
-        collision |= bool(e.get('contact_guard', {}).get('stop'))
-    complete = len(hold) == samples
-    min_clearance = min((e['bottom_clearance_m'] for e in hold), default=None)
-    clearance_ok = complete and min_clearance >= .05
-    slip_ok = reference is not None and max_slip <= config.slip_fail_m
-    success = bool(clearance_ok and support_ok and slip_ok and not collision)
-    reason = ('collision_or_execution_fault' if collision else 'missing_test_lift' if reference is None
-              else 'slip' if not slip_ok else 'hold_failed' if not clearance_ok
-              else 'no_opposing_support' if not support_ok else 'success')
-    return dict(strict_success=success, termination_reason=reason, slip_distance_m=max_slip,
-        slip_limit_m=config.slip_fail_m, hold_duration_s=len(hold)*control_dt_s,
-        hold_min_clearance_m=min_clearance, hold_opposing_support=bool(complete and support_ok),
-        peak_region_normal_N=peak_region, contact_guard_fault=bool(collision),
+        stop = bool(e.get('contact_guard', {}).get('stop'))
+        sample = (wrist.inv().apply(np.asarray(e['object_position_m'])-o['wrist_position_m']),
+                  (wrist.inv()*Rotation.from_quat(object_q[[1, 2, 3, 0]])).as_matrix(), e['bottom_clearance_m'],
+                  bool(opposing_support(region[None], config.support_threshold_N)[0]), stop)
+        if not samples and e['phase'] == 'test_lift':
+            # V1 begins tracking at the command boundary, before its first lift
+            # interval. The preceding recorded post-step state is that boundary.
+            samples.append(sample if previous is None else previous)
+        if samples:
+            samples.append(sample)
+        else:
+            early_fault |= stop
+        previous = sample
+    if early_fault or not samples:
+        outcome = dict(reason='collision' if early_fault else 'missing_test_lift', slip_m=0., longest_stable_s=0.)
+    else:
+        outcome = score_lift(samples, control_dt_s, config)
+    reason = 'collision_or_execution_fault' if outcome['reason'] == 'collision' else outcome['reason']
+    return dict(strict_success=reason == 'success', termination_reason=reason, slip_distance_m=outcome['slip_m'],
+        lost_limit_m=config.lost_m, longest_stable_s=outcome['longest_stable_s'], stable_hold_s=config.stable_hold_s,
+        lift_clearance_m=config.lift_clearance_m, peak_region_normal_N=peak_region,
+        contact_guard_fault=reason == 'collision_or_execution_fault',
         fragility_not_simulated=True, f_break_N=None, evaluation_sample_hz=1/control_dt_s,
         evaluation_scope='rigid unbreakable object; no fragility/breakage validation',
         slip_reference='state before first test_lift command, in palm frame',

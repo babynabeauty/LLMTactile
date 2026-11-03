@@ -3,10 +3,15 @@ import unittest
 import numpy as np
 
 from .multiobject_geometry import ObjectSpec
-from .v1_task import (BASE_MOTION, V1Config, SamplerConfig, BreakMonitor, SlipTracker, LEVEL_RANGES_N,
-    action_joints, base_draw_weights, break_soft_rate, episode_specs, force_to_level, hand_shape_joints,
-    limit_residual, minimum_grip_force, object_offsets, opposing_support, sample_episode, scaled_object,
-    takeover_tick, wrap_yaw)
+from .v1_task import (BASE_MOTION, V1Config, SamplerConfig, BreakMonitor, SlipTracker, StableHold,
+    LEVEL_RANGES_N, action_joints, base_draw_weights, break_soft_rate, episode_specs, force_to_level,
+    hand_shape_joints, limit_residual, minimum_grip_force, object_offsets, opposing_support, pose_change,
+    sample_episode, scaled_object, score_lift, takeover_tick, wrap_yaw)
+
+
+def turn_z(deg):
+    c, s = np.cos(np.radians(deg)), np.sin(np.radians(deg))
+    return np.array([[c, -s, 0], [s, c, 0], [0, 0, 1]])
 
 
 class SamplerTest(unittest.TestCase):
@@ -106,6 +111,58 @@ class BreakAndSlipTest(unittest.TestCase):
         self.assertAlmostEqual(tracker.update(np.array([[0, .004, 0]]), active)[0], .001)
         self.assertAlmostEqual(tracker.distance[0], .004)
         self.assertEqual(tracker.update(np.array([[0, .02, 0]]), np.array([False]))[0], 0)
+
+    def test_pose_change_measures_translation_and_rotation(self):
+        shift, angle = pose_change(np.zeros(3), np.eye(3), np.array([[.003, .004, 0], [0, 0, 0]]),
+                                   np.stack([np.eye(3), turn_z(30)]))
+        np.testing.assert_allclose(shift, [.005, 0])
+        np.testing.assert_allclose(angle, [0, 30], atol=1e-6)
+
+    def test_stable_hold_needs_two_still_seconds_after_lift(self):
+        cfg, tracker, dt = V1Config(), StableHold(1), 1/60
+
+        def sample(k, clearance=.05, x=0., support=True):
+            return tracker.update(np.array([k*dt]), np.array([clearance]), np.array([[x, 0, 0]]),
+                                  np.eye(3)[None], np.array([support]), np.array([True]), cfg)[0]
+        self.assertFalse(any(sample(k, clearance=.01) for k in range(60)))       # below 2 cm
+        self.assertFalse(tracker.lifted[0])
+        self.assertFalse(any(sample(k, support=False) for k in range(60, 120)))  # no opposing support
+        self.assertTrue(tracker.lifted[0] and not tracker.supported[0])
+        # 3 mm jumps every second keep restarting the interval.
+        self.assertFalse(any(sample(k, x=.003*(k//60)) for k in range(120, 300)))
+        self.assertAlmostEqual(tracker.longest[0], 59/60)
+        # Still from k = 300: two seconds later the hold is complete.
+        self.assertFalse(any(sample(k, x=.009) for k in range(300, 420)))
+        self.assertTrue(sample(420, x=.009))
+        tracker.reset([0])
+        self.assertFalse(tracker.lifted[0] or tracker.longest[0])
+
+    def test_stable_hold_restarts_on_rotation(self):
+        cfg, tracker = V1Config(), StableHold(1)
+        for k in range(200):
+            self.assertFalse(tracker.update(np.array([k/60]), np.array([.05]), np.zeros((1, 3)),
+                turn_z(k*.1)[None], np.array([True]), np.array([True]), cfg)[0])   # 6 deg/s keeps turning
+        self.assertLess(tracker.longest[0], 1)
+
+    def test_score_lift_decides_like_the_environment(self):
+        cfg, dt = V1Config(), 1/60
+
+        def run(x, clearance=lambda k: .05, fault=lambda k: False):
+            return score_lift([(np.array([x(k), 0, 0]), np.eye(3), clearance(k), True, fault(k)) for k in range(300)],
+                              dt, cfg)
+        # 1 cm of slip while lifting, then held still: success two seconds after the slip stops.
+        slipped = run(lambda k: min(k, 30)/3000, clearance=lambda k: min(k, 30)/1000)
+        self.assertEqual((slipped['reason'], slipped['decided_at']), ('success', 147))
+        self.assertAlmostEqual(slipped['slip_m'], .01)
+        self.assertEqual(run(lambda k: .04*(k >= 10))['reason'], 'dropped')
+        self.assertEqual(run(lambda k: 0., fault=lambda k: k == 5)['decided_at'], 5)
+        self.assertEqual(run(lambda k: 0., clearance=lambda k: 0.)['reason'], 'not_lifted')
+        unstable = run(lambda k: .003*(k//60))
+        self.assertEqual((unstable['reason'], unstable['decided_at']), ('unstable', None))
+
+    def test_stable_hold_must_be_positive(self):
+        with self.assertRaises(ValueError):
+            V1Config(stable_hold_s=0.)
 
     def test_support_is_thumb_or_palm_against_another_finger(self):
         regions = np.zeros((5, 7))

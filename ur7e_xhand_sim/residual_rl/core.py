@@ -136,8 +136,3 @@ def interval_overlap(t0, t1, start, end):
     if np.any(t1 < t0) or np.any(end < start):
         raise ValueError('Interval ends must not precede starts')
     return np.maximum(0., np.minimum(t1, end) - np.maximum(t0, start))
-
-def hold_success(hold_duration_s, hold_min_clearance_m, fault=False):
-    """All of the designated final hold, not an accumulated arbitrary interval."""
-    return ((np.asarray(hold_duration_s) >= 3. - 1e-6)
-            & (np.asarray(hold_min_clearance_m) >= .05) & ~np.asarray(fault, dtype=bool))

@@ -23,13 +23,13 @@ from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnv
 import genesis as gs
 
-from .core import ROOT, hold_success, interval_overlap
+from .core import ROOT
 from .control_protocol import (V1_RATES, HISTORY_SAMPLES, current_control_protocol, elapsed_feature,
     lookahead_feature)
 from .multiobject_geometry import ObjectSpec
 from .solver_profile import normalize_solver_profile, read_solver_readback, validate_solver_readback
 from .tactile_provenance import current_tactile_model
-from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, REGIONS, FINGERS, PHASES,
+from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, StableHold, REGIONS, FINGERS, PHASES,
     HAND_SHAPES, YAW_PERIOD_DEG, base_draw_weights, hand_shape_joints, link_region, limit_residual,
     break_soft_rate, object_offsets, opposing_support, sample_episode, wrap_yaw)
 sys.path.insert(0, str(ROOT/'ur7e_xhand_sim'))
@@ -282,6 +282,8 @@ class V1VecEnv(VecEnv):
             raise AssertionError('Contact friction differs from the lane material')
         rotation = quaternion_matrix(out['palm_quaternion_wxyz'])
         out['object_in_palm_m'] = np.einsum('nji,nj->ni', rotation, out['object_position_m']-out['palm_position_m'])
+        out['object_in_palm_rotation'] = np.einsum('nji,njk->nik', rotation,
+                                                   quaternion_matrix(out['object_quaternion_wxyz']))
         return out
 
     def _sample_tactile(self):
@@ -460,11 +462,10 @@ class V1VecEnv(VecEnv):
         self.robot.control_dofs_position(self.command[lanes], self.indices, envs_idx=lanes)
         self.breaks.reset(lanes)
         self.slip.reset(lanes)
-        for name in ('returns', 'max_clearance', 'hold_duration', 'load_integral', 'peak_all_load',
-                     'peak_region', 'hold_peak_region', 'residual_abs_integral', 'elapsed'):
+        self.stable.reset(lanes)
+        for name in ('returns', 'max_clearance', 'load_integral', 'peak_all_load', 'peak_region',
+                     'lifted_peak_region', 'residual_abs_integral', 'elapsed'):
             getattr(self, name)[lanes] = 0.
-        self.hold_min[lanes] = np.inf
-        self.hold_support_ok[lanes] = True
         self.terms[lanes] = 0.
         self.history[lanes] = 0.
         state = self._state()
@@ -483,10 +484,10 @@ class V1VecEnv(VecEnv):
         self.command = np.zeros((n, 18))
         self.breaks = BreakMonitor(n, self.config.break_consecutive_steps)
         self.slip = SlipTracker(n)
-        for name in ('returns', 'max_clearance', 'hold_duration', 'load_integral', 'peak_all_load',
-                     'peak_region', 'hold_peak_region', 'residual_abs_integral', 'elapsed', 'hold_min'):
+        self.stable = StableHold(n)
+        for name in ('returns', 'max_clearance', 'load_integral', 'peak_all_load', 'peak_region',
+                     'lifted_peak_region', 'residual_abs_integral', 'elapsed'):
             setattr(self, name, np.zeros(n))
-        self.hold_support_ok = np.ones(n, dtype=bool)
         self.terms = np.zeros((n, len(REWARD_TERMS)))
         self.history = np.zeros((n, HISTORY_SAMPLES, 5, 120, 3), np.float32)
         self.proprio = np.zeros((n, HISTORY_SAMPLES, self.state_dim), np.float32)
@@ -541,7 +542,7 @@ class V1VecEnv(VecEnv):
         change = c.residual_change_weight*np.square((self.residual-old)/c.residual_rate_rad).sum(-1)
         reward -= change
         self.terms[:, 4] -= change
-        failed = np.zeros(n, dtype=bool)
+        failed, succeeded = np.zeros(n, dtype=bool), np.zeros(n, dtype=bool)
         reason = np.array(['']*n, dtype=object)
         for sub in range(self.rates.action_stride):
             tick = time.perf_counter()
@@ -560,11 +561,7 @@ class V1VecEnv(VecEnv):
             m = self._metrics()
             dt = 1/self.rates.tactile_hz
             now = self.lane_tick/self.rates.physics_hz
-            hold_start = np.array([self.bases[k].hold_start_s for k in self.lane_base])
             lift_start = np.array([self.bases[k].trajectory.phase_starts['test_lift'] for k in self.lane_base])
-            end = np.array([self.bases[k].trajectory.duration_s for k in self.lane_base])
-            hold_dt = interval_overlap(now-dt, now, hold_start, end)
-            in_hold = hold_dt > 0
             any_support = (m['region_normal_N'][:, :6] > c.support_threshold_N).any(-1)
             # Slip counts from the first lifting command: sliding while lifting means too little grip.
             slip_m = self.slip.update(m['object_in_palm_m'], (now >= lift_start) & ~failed)
@@ -576,28 +573,27 @@ class V1VecEnv(VecEnv):
             reward += terms.sum(-1)
             self.terms[:, :4] += terms
             fault = (m['table_normal_N'] > c.table_fault_N) | m['self_contact']
-            slipped = self.slip.distance > c.slip_fail_m
-            for flag, name in ((fault, 'collision'), (slipped, 'slip')):
+            # Slip alone never ends an episode; this far out of place the object is no longer held.
+            lost = self.slip.distance > c.lost_m
+            for flag, name in ((fault, 'collision'), (lost, 'dropped')):
                 new = flag & ~failed
                 reason[new] = name
                 failed |= new
+            succeeded = self.stable.update(now, m['clearance_m'], m['object_in_palm_m'], m['object_in_palm_rotation'],
+                opposing_support(m['region_normal_N'], c.support_threshold_N), ~failed, c)
             self.max_clearance = np.maximum(self.max_clearance, m['clearance_m'])
             self.load_integral += m['all_robot_load_N']*dt
             self.peak_all_load = np.maximum(self.peak_all_load, m['all_robot_load_N'])
-            self.hold_duration += hold_dt
-            self.hold_min = np.where(in_hold, np.minimum(self.hold_min, m['clearance_m']), self.hold_min)
-            self.hold_support_ok &= ~in_hold | opposing_support(m['region_normal_N'], c.support_threshold_N)
-            self.hold_peak_region = np.where(in_hold, np.maximum(self.hold_peak_region, m['region_normal_N'].max(-1)),
-                                             self.hold_peak_region)
+            self.lifted_peak_region = np.where(m['clearance_m'] >= c.lift_clearance_m,
+                np.maximum(self.lifted_peak_region, m['region_normal_N'].max(-1)), self.lifted_peak_region)
             state = self._state()
             self.proprio[:, :-1] = self.proprio[:, 1:]
             self.proprio[:, -1] = state
         self.elapsed += self.rates.action_dt
         self.residual_abs_integral += np.abs(self.residual).mean(-1)*self.rates.action_dt
-        ended = self.lane_tick >= self.lane_end
-        done = failed | ended
-        success = (ended & ~failed & hold_success(self.hold_duration, self.hold_min)
-                   & self.hold_support_ok)
+        # Success ends the episode as soon as the object has stayed still in the hand long enough.
+        success = succeeded & ~failed
+        done = failed | success | (self.lane_tick >= self.lane_end)
         terminal = np.where(success, c.success_bonus, -c.failure_penalty)*done
         reward += terminal
         self.terms[:, 5] += terminal
@@ -607,8 +603,8 @@ class V1VecEnv(VecEnv):
         lanes = np.flatnonzero(done)
         for i in lanes:
             if not reason[i]:
-                reason[i] = 'success' if success[i] else ('no_opposing_support' if self.hold_duration[i] >= 3-1e-6
-                    and self.hold_min[i] >= .05 else 'hold_failed')
+                reason[i] = ('success' if success[i] else 'not_lifted' if not self.stable.lifted[i]
+                             else 'no_opposing_support' if not self.stable.supported[i] else 'unstable')
             infos[i] = dict(episode_metrics=self._episode_metrics(i, bool(success[i]), reason[i]),
                 episode={'r': float(self.returns[i]), 'l': int(round(self.elapsed[i]*self.rates.action_hz))},
                 terminal_observation={k: v[i].copy() for k, v in obs.items()}, **{'TimeLimit.truncated': False})
@@ -632,11 +628,10 @@ class V1VecEnv(VecEnv):
             f_min_N=spec['f_min_N'], window_ratio=None if np.isinf(spec['window_ratio']) else spec['window_ratio'],
             narrow_window=spec['narrow_window'], spec_index=spec['spec_index'], discard=spec['discard'],
             hand_shape=self.hand_shape, joint_friction_Nm=float(self.joint_friction[i]), fixed_gain=self.fixed_gain,
-            max_clearance_m=float(self.max_clearance[i]), hold_duration_s=float(self.hold_duration[i]),
-            hold_min_clearance_m=float(self.hold_min[i]) if np.isfinite(self.hold_min[i]) else None,
-            hold_opposing_support=bool(self.hold_support_ok[i]),
-            slip_distance_m=float(self.slip.distance[i]),
-            peak_region_normal_N=float(self.peak_region[i]), hold_peak_region_normal_N=float(self.hold_peak_region[i]),
+            max_clearance_m=float(self.max_clearance[i]), slip_distance_m=float(self.slip.distance[i]),
+            longest_stable_s=float(self.stable.longest[i]),
+            peak_region_normal_N=float(self.peak_region[i]),
+            lifted_peak_region_normal_N=float(self.lifted_peak_region[i]),
             peak_to_break_ratio=None if np.isinf(spec['f_break_N']) else float(self.peak_region[i]/spec['f_break_N']),
             mean_all_robot_contact_force_N=float(self.load_integral[i]/duration),
             peak_all_robot_contact_force_N=float(self.peak_all_load[i]),
@@ -668,9 +663,12 @@ class V1VecEnv(VecEnv):
             s_offset_variants={b.base_id: [dict(offset_m=v['offset_m'].tolist(), turn_deg=v['turn_deg'])
                                for v in vs] for b, vs in zip(self.bases, self.variants) if vs},
             break_rule='normal resultant per region (5 fingers, palm, arm) above F_break for consecutive physics steps',
-            slip_rule='largest object displacement in the palm frame since the first test_lift command',
-            success='final 3 s: object lowest point >=5 cm at every 60 Hz sample, thumb or palm plus another '
-                    'finger in contact (normal >= support threshold), no break, no collision, slip within limit',
+            slip_rule='largest object displacement in the palm frame since the first test_lift command; '
+                      'penalized per mm, never terminal; beyond config.lost_m the object is dropped',
+            success='ends the episode once, at every 60 Hz sample of an interval of config.stable_hold_s, the '
+                    'object lowest point is >= config.lift_clearance_m, thumb or palm plus another finger touch it '
+                    '(normal >= support threshold) and its palm-frame pose stays within config.stable_shift_m and '
+                    'config.stable_rotation_deg of the interval start; no break, no collision, not dropped before',
             link_regions=self.link_regions, bases=[b.summary() for b in self.bases],
             excluded_bases=self.excluded_bases, prefix_wall_s=self.prefix_wall_s,
             takeover_states=[dict(base_id=b.base_id, prefix_contact_N=s['prefix_contact_N'],

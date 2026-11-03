@@ -155,7 +155,7 @@ class ResumableSkillTest(unittest.TestCase):
 
 
 class OnlineScoreTest(unittest.TestCase):
-    def score_case(self, slip=0., support=True, contact_fault=False):
+    def score_case(self, slip=0., support=True, contact_fault=False, jump_every=None):
         import json
         import tempfile
         from pathlib import Path
@@ -167,8 +167,10 @@ class OnlineScoreTest(unittest.TestCase):
         for i, phase in enumerate(phases):
             controls.append(dict(step=i, observation=dict(wrist_position_m=[0, 0, 0],
                                                           wrist_quaternion_wxyz=[1, 0, 0, 0])))
-            evaluations.append(dict(step=i, phase=phase, object_position_m=[slip if i > 0 else 0., 0, .1],
-                solver_contacts=contacts, bottom_clearance_m=.08, contact_guard={'stop': contact_fault}))
+            x = (slip if i > 0 else 0.)+(.003*(i//jump_every) if jump_every else 0.)
+            evaluations.append(dict(step=i, phase=phase, object_position_m=[x, 0, .1],
+                object_quaternion_wxyz=[1, 0, 0, 0], solver_contacts=contacts, bottom_clearance_m=.08,
+                contact_guard={'stop': contact_fault}))
         with tempfile.TemporaryDirectory() as d:
             path = Path(d)/'control.jsonl'
             path.write_text('\n'.join(json.dumps(r) for r in controls))
@@ -178,10 +180,14 @@ class OnlineScoreTest(unittest.TestCase):
         good = self.score_case()
         self.assertTrue(good['strict_success'])
         self.assertTrue(good['fragility_not_simulated'])
+        # A slip followed by a still two seconds succeeds; slip is only penalized in training.
         slipped = self.score_case(slip=.006)
-        self.assertFalse(slipped['strict_success'])
+        self.assertTrue(slipped['strict_success'])
         self.assertAlmostEqual(slipped['slip_distance_m'], .006)
-        self.assertEqual(slipped['termination_reason'], 'slip')
+        self.assertEqual(self.score_case(slip=.04)['termination_reason'], 'dropped')
+        unstable = self.score_case(jump_every=60)
+        self.assertEqual(unstable['termination_reason'], 'unstable')
+        self.assertLess(unstable['longest_stable_s'], 1)
         unsupported = self.score_case(support=False)
         self.assertEqual(unsupported['termination_reason'], 'no_opposing_support')
         fault = self.score_case(contact_fault=True)
