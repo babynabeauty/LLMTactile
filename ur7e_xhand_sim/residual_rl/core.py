@@ -7,7 +7,6 @@ from numbers import Integral
 import numpy as np
 
 ROOT = Path(__file__).resolve().parents[2]
-DEMO = ROOT / 'outputs/rule_demos/teacher_pinch_v2_20261024'
 
 @dataclass(frozen=True)
 class RateConfig:
@@ -36,7 +35,7 @@ class RateConfig:
     def samples_per_action(self): return self.tactile_hz // self.action_hz
 
 class Trajectory:
-    def __init__(self, path=DEMO / 'control.jsonl'):
+    def __init__(self, path):
         path = Path(path).expanduser().resolve()
         self.path = path
         self.sha256 = hashlib.sha256(path.read_bytes()).hexdigest()
@@ -95,23 +94,6 @@ class Trajectory:
         index=np.clip(np.searchsorted(self.times,time_s,side='right')-1,0,len(self.times)-1)
         return self.command_grip_gains[index]
 
-def gains_from_action(action):
-    action = np.asarray(action, dtype=np.float32)
-    if not np.isfinite(action).all():
-        raise ValueError('Non-finite policy action')
-    return 1.5 + .5 * np.clip(action, -1, 1)
-
-def rate_limit_gains(previous, requested, max_delta=.25):
-    previous, requested = np.asarray(previous), np.asarray(requested)
-    if not np.isfinite(previous).all() or not np.isfinite(requested).all():
-        raise ValueError('Gain limiter requires finite previous and requested gains')
-    if np.ndim(max_delta) != 0 or not np.isfinite(max_delta) or max_delta < 0:
-        raise ValueError('Gain rate limit must be a finite nonnegative scalar')
-    if np.any((previous < 1.) | (previous > 2.)):
-        raise ValueError('Previous gains must already be within [1, 2]')
-    return np.clip(previous + np.clip(requested - previous,
-                   -max_delta, max_delta), 1., 2.)
-
 def interval_overlap(t0, t1, start, end):
     """Elapsed time shared by a physics interval and a designated task interval.
 
@@ -130,16 +112,3 @@ def hold_success(hold_duration_s, hold_min_clearance_m, fault=False):
     """All of the designated final hold, not an accumulated arbitrary interval."""
     return ((np.asarray(hold_duration_s) >= 3. - 1e-6)
             & (np.asarray(hold_min_clearance_m) >= .05) & ~np.asarray(fault, dtype=bool))
-
-def reward_rate(clearance, contact_load, slip_speed):
-    """Per-second reward; physical labels only, never actor observations.
-
-    Sum of individual contact force magnitudes is a load proxy, NOT normal force.
-    Slip is force-weighted tangential material velocity on active cube contacts.
-    """
-    load = np.asarray(contact_load)
-    supported = (load > .05).sum(axis=-1) >= 2
-    progress = np.clip(np.asarray(clearance) / .07, 0., 1.) * supported
-    force_cost = .02 * np.square(load / 10.).sum(axis=-1)
-    slip_cost = 2. * np.clip(np.asarray(slip_speed) / .02, 0., 5.)
-    return 2. * progress - force_cost - slip_cost - .02

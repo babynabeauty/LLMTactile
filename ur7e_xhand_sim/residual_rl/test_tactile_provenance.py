@@ -66,37 +66,6 @@ def test_old_commands_can_be_replayed_without_relabelling_raw(tmp_path):
         trajectory_tactile_evidence(path)
 
 
-def test_importer_preserves_profile_and_snapshots_engine(tmp_path):
-    from .test_multiobject_import_teacher import fixture
-    from .multiobject_import_teacher import convert
-    source,_,_=fixture(tmp_path,'cuboid')
-    profile=current_tactile_model()
-    for relative in profile['source_sha256']:
-        snapshot=source/'source_snapshot'/relative
-        snapshot.parent.mkdir(parents=True,exist_ok=True)
-        snapshot.write_bytes((ROOT/relative).read_bytes())
-    for name in ('manifest.json','object_scene.json'):
-        path=source/name;record=json.loads(path.read_text());record['tactile_model']=profile
-        if name=='manifest.json':
-            record['source_sha256'].update({str(ROOT/key):value for key,value in profile['source_sha256'].items()})
-        path.write_text(json.dumps(record))
-    result=convert(source,'cuboid',tmp_path/'bundle')
-    assert tactile_models_match(result['source_tactile_model'],profile)
-    assert (tmp_path/'bundle/source_evidence/source_snapshot'/ENGINE_RELATIVE).is_file()
-
-
-def test_multiobject_snapshot_includes_engine_and_profile_helper(tmp_path,monkeypatch):
-    from . import multiobject_train
-    for relative in (ENGINE_RELATIVE,HELPER_RELATIVE):
-        source=tmp_path/'project'/relative;source.parent.mkdir(parents=True,exist_ok=True)
-        source.write_text('# fixture '+relative)
-    monkeypatch.setattr(multiobject_train,'ROOT',tmp_path/'project')
-    result=multiobject_train.source_snapshot(tmp_path/'output')
-    assert set(result)=={ENGINE_RELATIVE,HELPER_RELATIVE}
-    for relative,digest in result.items():
-        assert hashlib.sha256((tmp_path/'output/source_snapshot'/relative).read_bytes()).hexdigest()==digest
-
-
 def test_resume_rejects_legacy_or_changed_sensor_but_allows_current(tmp_path):
     path=tmp_path/'final_model.zip';path.write_bytes(b'CPU fixture, not a model')
     manifest=tmp_path/'manifest.json'

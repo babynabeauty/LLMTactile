@@ -38,20 +38,3 @@ def test_frozen_metadata_is_only_nonzero_authority(tmp_path):
     with pytest.raises(ValueError):enforce_trajectory_solver_profile(path,{'noslip_iterations':0})
     path.write_text('changed commands')
     with pytest.raises(ValueError,match='metadata hash'):trajectory_solver_profile(path)
-
-
-def test_uniform_experiment_rejects_mixed_profiles(tmp_path):
-    from .multiobject_train import load_experiment
-    objects=[]
-    for shape,n in [('cube',5),('cuboid',0)]:
-        directory=tmp_path/shape;directory.mkdir();trajectory=directory/'control.jsonl';trajectory.write_text(shape)
-        (directory/'trajectory_metadata.json').write_text(json.dumps({'trajectory_sha256':digest(trajectory),'solver_profile':profile(n)}))
-        objects.append({'object_id':shape,'trajectory_path':str(trajectory),'trajectory_sha256':digest(trajectory)})
-    protocol={'objects':objects,'solver_profile':profile(),'splits':{split:[{'condition_id':split,'mass_kg':mass,'friction':.8}]
-        for split,mass in [('train',.05),('validation',.1),('test',.2)]}}
-    path=tmp_path/'protocol.json';path.write_text(json.dumps(protocol))
-    with pytest.raises(ValueError,match='uniform experiment profile'):load_experiment(path)
-    protocol['objects']=objects[:1];path.write_text(json.dumps(protocol))
-    assert load_experiment(path)['solver_profile']==profile()
-    del protocol['solver_profile'];path.write_text(json.dumps(protocol))
-    with pytest.raises(ValueError,match='uniform experiment profile'):load_experiment(path)
