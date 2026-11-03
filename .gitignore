@@ -94,3 +94,6 @@ Genesis/genesis/ext/VolumeSampling
 # Large bundled data files
 /Genesis/genesis/ext/VolumeSampling
 /docs/static/data/hands/allegro.json
+
+# Small platform CAD required by the default UR7e/XHand scene.
+!ur7e_xhand_sim/sources/platform/base_link.STL

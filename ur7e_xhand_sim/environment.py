@@ -14,6 +14,7 @@ import genesis as gs
 
 from build_assets import HERE, ARM_JOINTS, HAND_JOINTS, build
 from cameras import load_camera_views, camera_kwargs
+from platform_asset import build_platform, PLATFORM_POSITION, FLOOR_Z, TABLE_TOP_Z
 from residual_rl.multiobject_geometry import ObjectSpec
 from residual_rl.solver_profile import normalize_solver_profile, read_solver_readback, validate_solver_readback
 from residual_rl.tactile_provenance import current_tactile_model
@@ -28,7 +29,7 @@ class Sandbox:
                  silicone_skip_idle_pcg=True, silicone_solver='ipc', silicone_maxvolume=1e-7,
                  object_spec=None, physics_dt_s=.005, control_substeps=5,
                  noslip_iterations=0, noslip_tolerance=1e-6, deterministic=False,
-                 table_contact_force_limit_N=5.0):
+                 table_contact_force_limit_N=5.0, overview=False):
         from contact_guard import validate_table_force_limit
         self.table_contact_force_limit_N=validate_table_force_limit(table_contact_force_limit_N)
         if (isinstance(physics_dt_s,bool) or not np.isfinite(physics_dt_s)
@@ -87,9 +88,10 @@ class Sandbox:
                                                  noslip_tolerance=self.solver_profile['noslip_tolerance']),
             vis_options=gs.options.VisOptions(background_color=(.10,.13,.18),ambient_light=(.5,.5,.5)),
             show_viewer=False)
-        self.scene.add_entity(gs.morphs.Plane(),surface=gs.surfaces.Default(color=(.22,.25,.30,1)))
-        self.table = self.scene.add_entity(gs.morphs.Box(size=(1.3,1.0,.04),pos=(-.4,0,.18),fixed=True),
-            material=gs.materials.Rigid(friction=.8,coup_friction=.8,coup_softness=silicone_contact_softness),surface=gs.surfaces.Default(color=(.40,.30,.20,1)))
+        self.scene.add_entity(gs.morphs.Plane(pos=(0,0,FLOOR_Z)),surface=gs.surfaces.Default(color=(.22,.25,.30,1)))
+        platform_model, self.platform_metadata = build_platform()
+        self.table = self.scene.add_entity(gs.morphs.URDF(file=str(platform_model),pos=PLATFORM_POSITION,fixed=True),
+            material=gs.materials.Rigid(friction=.8,coup_friction=.8,coup_softness=silicone_contact_softness),surface=gs.surfaces.Default())
         self.robot = self.scene.add_entity(gs.morphs.URDF(file=str(model),fixed=True,pos=(0,0,.2),
             merge_fixed_links=True,links_to_keep=['right_hand_link','tool0']),
             material=gs.materials.Rigid(friction=robot_friction,coup_friction=robot_friction,coup_softness=silicone_contact_softness,
@@ -165,6 +167,9 @@ class Sandbox:
             from ipc_support import weld_ipc_triangle_soups
             initial=dict(zip(ARM_JOINTS+HAND_JOINTS,np.r_[np.deg2rad([0.,-89.95,89.96,-89.96,-89.95,-44.98]),np.zeros(12)]))
             self.silicone_parameters['ipc_mesh_import']=weld_ipc_triangle_soups(self.scene.sim.coupler,self.robot,initial)
+        if overview:
+            self.overview_camera=self.scene.add_camera(res=(1200,900),
+                pos=(-2.1,-2.5,1.7),lookat=(-.12,-.2,.15),fov=48,GUI=False)
         self.scene.build(n_envs=1)
         self.solver_readback=validate_solver_readback(self.solver_profile,
             read_solver_readback(self.scene.rigid_solver))
@@ -324,7 +329,7 @@ class Sandbox:
                 'tactile_semantics':'Uncalibrated geometric force estimate in nominal N, not SDK LSB or solver contact forces',
                 'tactile_parameters':{'probe_radius_m':.0015,'normal_stiffness':500.,'normal_damping':1.,
                                       'normal_exponent':1.2,'shear_scalar':2.},
-                'table_top_z_m':.20,'mount':'local ur5_xhand adapter and camera geometry; vendor XHAND URDF',
+                'table_top_z_m':TABLE_TOP_Z,'platform_asset':self.platform_metadata,'mount':'local ur5_xhand adapter and camera geometry; vendor XHAND URDF',
                 'materials':{**self.material_parameters,**self._object_material_readback()},
                 'object_spec':{**self.object_spec.protocol(),
                     'initial_position_m':self.scenario['target_initial_position_m'],

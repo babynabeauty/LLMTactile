@@ -1,0 +1,9 @@
+{
+  "source_directory": "ur7e_xhand",
+  "source_mesh": "platform_meshes/base_link.STL",
+  "source_link": "platform_base_link",
+  "sha256": {
+    "base_link.STL": "9fa091913561311946b57702f41ea5280f85f059da28098c8c71a305fa6ddc1c",
+    "source.urdf": "44b953bf221f076f6eab10bae3ab09bd0da06478c8baa46a5aec850ca325bfc8"
+  }
+}
