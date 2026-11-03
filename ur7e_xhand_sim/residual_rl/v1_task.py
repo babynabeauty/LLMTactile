@@ -18,6 +18,9 @@ FINGER_JOINTS = {'thumb': (0, 1, 2), 'index': (3, 4, 5), 'middle': (6, 7), 'ring
 # Fingers the small model may correct; a wrap does not require every finger to touch.
 HAND_SHAPES = {'pinch': ('thumb', 'index'), 'tripod': ('thumb', 'index', 'middle'), 'wrap': FINGERS}
 PHASES = ('close', 'preload', 'test_lift', 'lift', 'hold')
+# BasePolicyV1 motion per 60 Hz tick; v1_demo closes and lifts with the same timing.
+BASE_MOTION = dict(position_m_per_tick=.0015, hand_rad_per_tick=.012, turn_rad_per_tick=.01,
+                   min_ticks=20, settle_ticks=12)
 # Yaw symmetry period of each shape; cylinders and spheres look the same at every yaw.
 YAW_PERIOD_DEG = {'cube': 90., 'cuboid': 180., 'hex_prism': 60.}
 

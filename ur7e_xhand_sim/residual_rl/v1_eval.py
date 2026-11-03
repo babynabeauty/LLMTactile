@@ -40,7 +40,7 @@ def summarize(rows):
     out = dict(all=stats(rows), T1_level4=stats([r for r in rows if r['level'] == 4]),
                T2_levels1to3=stats([r for r in rows if r['level'] < 4]),
                T2_narrow=stats([r for r in rows if r['level'] < 4 and r['narrow_window']]))
-    for key in ('object_id', 'hand_shape', 'base_label', 'level'):
+    for key in ('object_id', 'hand_shape', 'base_label', 'level', 'edge_placement', 'unseen_object'):
         out['by_'+key] = {str(v): stats([r for r in rows if r[key] == v]) for v in sorted({r[key] for r in rows})}
     return out
 
@@ -54,7 +54,7 @@ def assign_specs(env, materials, levels, seed):
 
 
 def main(argv=None):
-    from .v1_train import METHODS, CPUTrainingPPO, build_environment
+    from .v1_train import METHODS, CPUTrainingPPO, build_environment, to_json
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--experiment-json', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
@@ -99,9 +99,9 @@ def main(argv=None):
         for name, rows in controllers.items():
             with (args.output/f'episodes_{name}.jsonl').open('w') as stream:
                 for row in rows:
-                    stream.write(json.dumps(row, allow_nan=False)+'\n')
+                    stream.write(to_json(row)+'\n')
             summary[name] = summarize(rows)
-        (args.output/'summary.json').write_text(json.dumps(summary, indent=2))
+        (args.output/'summary.json').write_text(to_json(summary, indent=2))
         print(json.dumps({k: summary[k]['all'] for k in controllers}, indent=2))
     finally:
         env.close()

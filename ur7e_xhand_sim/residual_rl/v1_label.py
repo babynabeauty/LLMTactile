@@ -1,7 +1,8 @@
 """Label BasePolicyV1 runs S / R / U and write base libraries and experiments (PLAN_v1 section 5).
 
 1 record: execution error, incomplete plan, or hand-object contact before close -> unusable
-2 zero-residual replay at 50 g / friction 0.8 / unbreakable: success -> S
+2 zero-residual replay at 50 g / friction 0.8 / unbreakable: success -> S; a replay that contradicts the
+  collection (drop or collision against a collected success, success against a collected failure) is excluded
 3 object center in the palm frame at close start vs the demonstration: > 2 cm or yaw > 10 deg -> U
 4 repair test: a constant residual added after first contact; any of ~29 candidates succeeds -> R, else U
 Train libraries keep S and R; test libraries keep S, R and U. One library per object x hand shape.
@@ -53,8 +54,8 @@ def record_check(run, demo):
     center = rotation.T@(np.asarray(evals[k]['object_position_m'])-np.asarray(o['wrist_position_m']))
     offset = center-np.asarray(demo['object_center_in_palm_m'])
     yaw_error = abs(wrap_yaw(run['placement']['yaw_deg'], YAW_PERIOD_DEG.get(run['object_spec']['shape'])))
-    return dict(usable=True, deviation=dict(palm_frame_m=offset.tolist(), distance_m=float(np.linalg.norm(offset)),
-                                            yaw_deg=float(yaw_error)))
+    return dict(usable=True, deviation=dict(palm_frame_m=offset.tolist(), world_m=(rotation@offset).tolist(),
+                                            distance_m=float(np.linalg.norm(offset)), yaw_deg=float(yaw_error)))
 
 
 def run_specs(env, specs, act):
@@ -89,10 +90,14 @@ def label_group(runs, demo, output, lanes, seed):
         replayable = [b for b in env.bases]
         zero = lambda obs: np.zeros((env.num_envs, len(joints)), np.float32)
         replay = run_specs(env, [dict(COLLECTION, base_id=b.base_id) for b in replayable], zero)
-        pending = []
+        pending, collected = [], {r['run_id']: bool((r.get('score') or {}).get('success')) for r in runs}
         for i, b in enumerate(replayable):
-            row = labels[b.base_id]
-            if replay[i]['success']:
+            row, result = labels[b.base_id], replay[i]
+            # Slip, missing support and breakage are stricter v1 criteria, not replay errors.
+            if collected[b.base_id] != result['success'] and (
+                    not collected[b.base_id] or result['termination_reason'] in ('hold_failed', 'collision')):
+                row.update(usable=False, reason=f"replay differs from collection ({result['termination_reason']})")
+            elif result['success']:
                 row['label'] = 'S'
             elif row['deviation']['distance_m'] > .02 or row['deviation']['yaw_deg'] > 10.:
                 row.update(label='U', reason='deviation beyond pre-screen')
@@ -147,6 +152,7 @@ def main(argv=None):
                 trajectory_sha256=r['trajectory_sha256'], object_initial_position_m=r['object_initial_position_m'],
                 object_initial_quaternion_wxyz=r['object_initial_quaternion_wxyz'], split=split,
                 source='BasePolicyV1', unseen_object=bool(r['placement'].get('unseen_object')),
+                edge=bool(r['placement'].get('edge')),
                 **{k: v for k, v in labels[r['run_id']].items() if k in ('label', 'deviation', 'repair_residual_rad')})
                 for r in group if r['split'] == split and labels[r['run_id']].get('label') in keep]
             if bases:
@@ -156,7 +162,9 @@ def main(argv=None):
                 libraries.append(path)
     (output/'labels.json').write_text(json.dumps(report, indent=2))
     counts = {g: {k: sum(v.get('label') == k for v in labels.values()) for k in ('S', 'R', 'U')} |
-              {'unusable': sum(not v['usable'] for v in labels.values())} for g, labels in report.items()}
+              {'unusable': sum(not v['usable'] for v in labels.values()),
+               'replay_mismatch': sum(v.get('reason', '').startswith('replay differs') for v in labels.values())}
+              for g, labels in report.items()}
     (output/'label_counts.json').write_text(json.dumps(counts, indent=2))
     shapes = sorted({json.loads(p.read_text())['hand_shape'] for p in train_libraries})
     if train_libraries:

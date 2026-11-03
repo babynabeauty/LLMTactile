@@ -38,24 +38,31 @@ def call(port, name, payload=None):
 
 
 def plan_jobs(config):
+    """Train and test placements within +-xy_range_m; edge test placements between that and +-edge_range_m."""
     rng = np.random.default_rng(config.get('seed', 1))
     radius, yaw = config.get('xy_range_m', .10), config.get('yaw_range_deg', 10.)
+    edge_radius = config.get('edge_range_m', .15)
     jobs = []
 
-    def add(demo_path, object_id, object_spec, split, count, unseen=False):
+    def add(demo_path, object_id, object_spec, split, count, unseen=False, edge=False):
         demo = json.loads(Path(demo_path).read_text())
         for i in range(count):
-            placement = {'offset_xy_m': rng.uniform(-radius, radius, 2).round(4).tolist(),
-                         'yaw_deg': round(float(rng.uniform(-yaw, yaw)), 2)}
+            xy = rng.uniform(-radius, radius, 2)
+            while edge and np.abs(xy).max() <= radius:
+                xy = rng.uniform(-edge_radius, edge_radius, 2)
+            placement = {'offset_xy_m': xy.round(4).tolist(), 'yaw_deg': round(float(rng.uniform(-yaw, yaw)), 2)}
             if unseen:
                 placement['unseen_object'] = True
-            jobs.append(dict(run_id=f"{object_id}_{demo['hand_shape']}_{split}_{i:03d}",
+            if edge:
+                placement['edge'] = True
+            jobs.append(dict(run_id=f"{object_id}_{demo['hand_shape']}_{'edge' if edge else split}_{i:03d}",
                 demo=str(Path(demo_path).resolve()), object_id=object_id, object_spec=object_spec,
                 hand_shape=demo['hand_shape'], split=split, placement=placement))
     for path in config['demos']:
         demo = json.loads(Path(path).read_text())
         add(path, demo['object_id'], demo['object_spec'], 'train', config['train_placements'])
         add(path, demo['object_id'], demo['object_spec'], 'test', config['test_placements'])
+        add(path, demo['object_id'], demo['object_spec'], 'test', config.get('edge_placements', 0), edge=True)
     for row in config.get('unseen', []):
         add(row['demo'], row['object_id'], row['object_spec'], 'test', config['unseen_placements'], unseen=True)
     return jobs

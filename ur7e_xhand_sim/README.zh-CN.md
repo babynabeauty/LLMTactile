@@ -25,8 +25,7 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
   "palm_quaternion_wxyz": [1.0, 0.0, 0.0, 0.0],
   "open_hand_rad": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
   "closed_hand_rad": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-  "grip_gain": 1.0,
-  "close_seconds": 1.0
+  "grip_gain": 1.0
 }
 ```
 
@@ -42,6 +41,12 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
 .venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_bases --libraries outputs/v1/demos/*/bases.json --output outputs/v1/smoke/experiment.json
 ```
 
+示范验收（零残差、50 g、摩擦 0.8 重放，每条都应成功）：
+
+```bash
+.venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_eval --experiment-json outputs/v1/smoke/experiment.json --output outputs/v1/smoke/replay --split train --base-only --materials '[[0.05, 0.8]]' --levels 4
+```
+
 ```bash
 .venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_train --experiment-json outputs/v1/smoke/experiment.json --output outputs/v1/smoke/train --smoke
 ```
@@ -55,8 +60,8 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
   "demos": ["outputs/v1/demos/cuboid_pinch/demo.json"],
   "unseen": [{"demo": "outputs/v1/demos/cuboid_pinch/demo.json", "object_id": "cube45",
               "object_spec": {"shape": "cube", "side_m": 0.045}}],
-  "train_placements": 30, "test_placements": 10, "unseen_placements": 10,
-  "xy_range_m": 0.10, "yaw_range_deg": 10, "seed": 1
+  "train_placements": 30, "test_placements": 10, "edge_placements": 3, "unseen_placements": 10,
+  "xy_range_m": 0.10, "edge_range_m": 0.15, "yaw_range_deg": 10, "seed": 1
 }
 ```
 
@@ -76,7 +81,7 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
 .venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_label --collection outputs/v1/collect --output outputs/v1/labels
 ```
 
-输出 `label_counts.json`、每个物体 × 手型的 base 库、`experiment_train.json`、`experiment_test.json`。
+输出 `label_counts.json`（含回放与采集不一致而剔除的数目）、每个物体 × 手型的 base 库、`experiment_train.json`、`experiment_test.json`。
 
 ## 5. 训练：3 种子 × 3 方法 × 2 阶段
 

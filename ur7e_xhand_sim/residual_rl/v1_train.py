@@ -11,6 +11,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 from pathlib import Path
 import random
 import subprocess
@@ -37,14 +38,26 @@ METHODS = {'tactile': dict(use_tactile=True, use_level=True),
            'tactile_no_level': dict(use_tactile=True, use_level=False)}
 
 
-def to_json(value):
-    return json.dumps(value, ensure_ascii=False, allow_nan=False,
-                      default=lambda v: v.tolist() if hasattr(v, 'tolist') else str(v))
+def finite(value):
+    """JSON-ready copy: numpy/torch values as Python numbers, NaN and inf as None."""
+    if isinstance(value, dict):
+        return {str(k): finite(v) for k, v in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [finite(v) for v in value]
+    if hasattr(value, 'tolist'):
+        return finite(value.tolist())
+    if isinstance(value, float) and not math.isfinite(value):
+        return None
+    return value
+
+
+def to_json(value, **kwargs):
+    return json.dumps(finite(value), ensure_ascii=False, allow_nan=False, default=str, **kwargs)
 
 
 def write_json(path, value):
     temporary = path.with_suffix(path.suffix+'.tmp')
-    temporary.write_text(to_json(value)+'\n')
+    temporary.write_text(to_json(value, indent=2)+'\n')
     temporary.replace(path)
 
 

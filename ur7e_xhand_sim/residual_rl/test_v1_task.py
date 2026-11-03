@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, LEVEL_RANGES_N,
+from .v1_task import (BASE_MOTION, V1Config, SamplerConfig, BreakMonitor, SlipTracker, LEVEL_RANGES_N,
     action_joints, base_draw_weights, break_soft_rate, episode_specs, force_to_level, hand_shape_joints,
     limit_residual, minimum_grip_force, object_offsets, opposing_support, sample_episode, takeover_tick, wrap_yaw)
 
@@ -66,8 +66,8 @@ class ResidualTest(unittest.TestCase):
         np.testing.assert_allclose(r, .1)
 
     def test_rate_can_cancel_fastest_base_closure(self):
-        # S8V4 closes at most .012 rad per 60 Hz tick, i.e. .048 rad per 15 Hz action.
-        self.assertGreaterEqual(V1Config().residual_rate_rad, 4*.012)
+        # The base closes at most hand_rad_per_tick per 60 Hz tick, four ticks per 15 Hz action.
+        self.assertGreaterEqual(V1Config().residual_rate_rad, 4*BASE_MOTION['hand_rad_per_tick'])
 
     def test_rejects_nonfinite(self):
         with self.assertRaises(ValueError):

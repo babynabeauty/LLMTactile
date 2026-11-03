@@ -1,9 +1,10 @@
 """v1 demonstration: one object x one hand shape, privileged scripted grasp in simulation.
 
 The spec JSON fixes the grasp: palm offset from the object center, palm
-orientation, open and closed hand postures and grip gain. Closing is a fixed
-interpolation with no tactile feedback, the same as BasePolicyV1. A successful
-run writes, next to the base-format commands (control.jsonl):
+orientation, open and closed hand postures and grip gain. Close, test_lift and
+lift use BasePolicyV1's timing (straight lines, one target per 60 Hz tick, no
+tactile feedback), so a successful demonstration predicts the bases. A
+successful run writes, next to the base-format commands (control.jsonl):
   reference.json  Astra success reference (7 keyframes x 3 views)
   demo.json       grasp parameters for BasePolicyV1
   bases.json      a one-base library (this demonstration) for smoke tests
@@ -21,7 +22,7 @@ from scipy.spatial.transform import Rotation, Slerp
 from environment import Sandbox
 from build_assets import HAND_JOINTS, ARM_JOINTS
 from contact_guard import assess_contacts
-from residual_rl.v1_task import HAND_SHAPES, hand_shape_joints, link_region, opposing_support
+from residual_rl.v1_task import BASE_MOTION, HAND_SHAPES, hand_shape_joints, link_region, opposing_support
 
 VIEWS = ('scene_front', 'scene_left', 'wrist')
 CONTACT_N = .05
@@ -59,8 +60,8 @@ def validate_spec(spec):
         value = np.asarray(spec.get(key), dtype=float)
         if value.shape != (size,) or not np.isfinite(value).all():
             raise ValueError(f'{key} must hold {size} finite numbers')
-    if not .2 <= float(spec.get('grip_gain', 1.)) <= 3. or float(spec.get('close_seconds', 1.)) <= 0:
-        raise ValueError('grip_gain must lie in [.2, 3] and close_seconds be positive')
+    if not .2 <= float(spec.get('grip_gain', 1.)) <= 3.:
+        raise ValueError('grip_gain must lie in [.2, 3]')
 
 
 class SpecDemo:
@@ -98,11 +99,12 @@ class SpecDemo:
         np.testing.assert_allclose(s.array(s.robot.get_dofs_kp(s.indices)).reshape(-1), kp, rtol=1e-6)
         self.grip_gain = float(gain)
 
-    def servo(self, pos, quat, hand, phase):
-        """One 15 Hz target, logged at 60 Hz."""
+    def servo(self, pos, quat, hand, phase, ticks=4):
+        """One target held for `ticks` 60 Hz samples (4 = one 15 Hz update), each logged."""
         s = self.sim
         pos, quat, hand = (np.asarray(v, float) for v in (pos, quat, hand))
-        self.correction = np.clip(self.correction+.12*(pos-s.array(s.wrist.get_pos()).reshape(3)), -.025, .025)
+        # Integral IK correction for arm sag; gain per call scales with ticks so its rate per second is fixed.
+        self.correction = np.clip(self.correction+.03*ticks*(pos-s.array(s.wrist.get_pos()).reshape(3)), -.025, .025)
         q, err = s.robot.inverse_kinematics(s.wrist, pos=pos+self.correction, quat=quat,
             dofs_idx_local=s.arm_indices, return_error=True, max_solver_iters=100, seed=42)
         err = s.array(err).reshape(-1)
@@ -114,7 +116,7 @@ class SpecDemo:
             raise ValueError('Demo joint target outside limits')
         target = np.clip(target, s.lower, s.upper)
         payload = {'actions': dict(zip(s.names, ((target-s.offset)/s.scale).tolist())), 'steps': 1}
-        for _ in range(4):
+        for _ in range(ticks):
             before = s.observe(full=False)
             s.step(payload)
             after = s.observe(full=True)
@@ -140,8 +142,21 @@ class SpecDemo:
         for _ in range(8):
             self.servo(pos, quat, hand, phase)
 
-    def touching(self):
-        return object_normals(self.evals[-1])[:6].sum() > CONTACT_N
+    def linear(self, phase, pos, quat, hand, on_tick=None):
+        """BasePolicyV1.move timing: straight line, one target per 60 Hz tick, then settle ticks."""
+        s, m = self.sim, BASE_MOTION
+        start, h0 = s.array(s.wrist.get_pos()).reshape(3), s.target[6:].copy()
+        n = max(m['min_ticks'], math.ceil(np.linalg.norm(pos-start)/m['position_m_per_tick']),
+                math.ceil(np.max(np.abs(hand-h0))/m['hand_rad_per_tick']))
+        for i in range(1, n+1):
+            self.servo(start+(pos-start)*i/n, quat, h0+(hand-h0)*i/n, phase, ticks=1)
+            if on_tick:
+                on_tick()
+        for _ in range(m['settle_ticks']):
+            self.servo(pos, quat, hand, phase, ticks=1)
+
+    def touching(self, evals):
+        return max(object_normals(e)[:6].sum() for e in evals) > CONTACT_N
 
     def capture_stage(self, name):
         s = self.sim
@@ -178,24 +193,21 @@ class SpecDemo:
         self.move('approach', pre, quat, open_hand, 1.)
         self.move('align', align, quat, open_hand, 2.)
         self.capture_stage('aligned')
-        if self.touching():
+        if self.touching(self.evals):
             raise ValueError('Hand touches the object before close')
         self.set_gain(float(c.get('grip_gain', 1.)))
-        steps, light = int(np.ceil(float(c.get('close_seconds', 1.))*15)), False
-        for i in range(1, steps+1):
-            self.servo(align, quat, open_hand+(closed-open_hand)*i/steps, 'close')
-            if not light and self.touching():
+
+        def first_contact():
+            if not any(row['name'] == 'light_contact' for row in self.stages) and self.touching(self.evals[-1:]):
                 self.capture_stage('light_contact')
-                light = True
-        for _ in range(10):
-            self.servo(align, quat, closed, 'close')
-        if not light:
+        self.linear('close', align, quat, closed, first_contact)
+        if not any(row['name'] == 'light_contact' for row in self.stages):
             raise ValueError('No contact with the object during close')
         self.capture_stage('closed')
-        self.move('test_lift', align+np.array([0, 0, .02]), quat, closed, 2.)
+        self.linear('test_lift', align+np.array([0, 0, .02]), quat, closed)
         self.capture_stage('test_lifted')
         lifted = align+np.array([0, 0, .10])
-        self.move('lift', lifted, quat, closed, 3.)
+        self.linear('lift', lifted, quat, closed)
         self.capture_stage('lifted')
         for _ in range(45):
             self.servo(lifted, quat, closed, 'hold')

@@ -20,7 +20,7 @@ from scipy.spatial.transform import Rotation, Slerp
 from build_assets import HERE, ARM_JOINTS, HAND_JOINTS
 from contact_guard import assess_contacts
 from residual_rl.multiobject_geometry import ObjectSpec
-from residual_rl.v1_task import FINGERS, FINGER_JOINTS, HAND_SHAPES, hand_shape_joints
+from residual_rl.v1_task import BASE_MOTION, FINGERS, FINGER_JOINTS, HAND_SHAPES, hand_shape_joints
 
 VLM_ROOT = Path('/home/sai/zsq/vlm-policy')
 GENDEX = Path('/home/sai/zsq/bench2dex-work/third_party/GenDexGrasp')
@@ -183,8 +183,9 @@ class BasePolicyV1:
     def _tick(self, target, phase):
         s = self.sim
         s.step({'actions': dict(zip(s.names, ((target-s.offset)/s.scale).tolist())), 'steps': 1})
+        # Tactile summaries only: per-taxel arrays (~50 kB a row) are never read from the bridge log.
         self.record.write(json.dumps({'step': s.steps, 'phase': phase, 'target': target.tolist(),
-                                      'observation': s.observe(full=True)})+'\n')
+                                      'observation': s.observe()})+'\n')
         # Privileged data goes only to a separate evaluation stream, never policy observations.
         e = s.evaluate()
         e.update(step=s.steps, phase=phase)
@@ -203,8 +204,9 @@ class BasePolicyV1:
         hand0 = s.target[6:].copy()
         rotations = Rotation.from_quat(np.stack([q0[[1, 2, 3, 0]], self.grasp_quat[[1, 2, 3, 0]]]))
         turn, slerp = (rotations[0].inv()*rotations[1]).magnitude(), Slerp([0, 1], rotations)
-        count = max(20, int(np.ceil(np.linalg.norm(position-start)/.0015)),
-                    int(np.ceil(np.max(np.abs(hand-hand0))/.012)), int(np.ceil(turn/.01)))
+        m = BASE_MOTION
+        count = max(m['min_ticks'], int(np.ceil(np.linalg.norm(position-start)/m['position_m_per_tick'])),
+                    int(np.ceil(np.max(np.abs(hand-hand0))/m['hand_rad_per_tick'])), int(np.ceil(turn/m['turn_rad_per_tick'])))
         s.render_enabled = False
         try:
             for i in range(1, count+1):
@@ -218,7 +220,7 @@ class BasePolicyV1:
                 target = s.array(q).reshape(-1)[s.indices]
                 target[6:] = hand0+(hand-hand0)*f
                 self._tick(target, phase)
-            for _ in range(12):
+            for _ in range(m['settle_ticks']):
                 self._tick(target, phase)
         finally:
             s.render_enabled = True

@@ -295,7 +295,7 @@ class V1VecEnv(VecEnv):
             lane_bases = [job[0] for job in lane_jobs]
             takeover = np.array([b.takeover_tick for b in lane_bases])
             self.robot.set_dofs_position(np.repeat(self.home[None], n, axis=0), self.indices, zero_velocity=True)
-            self.cube.set_pos(np.stack([job[1] for job in lane_jobs]))
+            self.cube.set_pos(np.stack([job[1] for job in lane_jobs]), zero_velocity=True)
             self.cube.set_quat(np.stack([job[2] for job in lane_jobs]))
             self._set_materials(lanes, np.full(n, .05), np.full(n, .8))
             contact = np.zeros(n)
@@ -412,7 +412,8 @@ class V1VecEnv(VecEnv):
         self.astra_level[lanes] = [d[1]['astra_level'] for d in draws]
         self.robot.set_dofs_position(np.stack([s['q'] for s in states]), self.indices,
                                      envs_idx=lanes, zero_velocity=True)
-        self.cube.set_pos(np.stack([s['object_position'] for s in states]), envs_idx=lanes)
+        # Without zero_velocity the object keeps the motion it had when the previous episode ended.
+        self.cube.set_pos(np.stack([s['object_position'] for s in states]), envs_idx=lanes, zero_velocity=True)
         self.cube.set_quat(np.stack([s['object_quaternion'] for s in states]), envs_idx=lanes)
         self._set_materials(lanes, np.array([d[1]['mass_kg'] for d in draws]),
                             np.array([d[1]['friction'] for d in draws]))
@@ -587,6 +588,7 @@ class V1VecEnv(VecEnv):
         duration = max(self.elapsed[i], 1e-9)
         return dict(success=success, task_success=success, strict_success=success, termination_reason=reason,
             object_id=self.object_id, base_id=base.base_id, base_label=base.label,
+            edge_placement=bool(base.metadata.get('edge')), unseen_object=bool(base.metadata.get('unseen_object')),
             mass_kg=spec['mass_kg'], friction=spec['friction'], level=spec['level'],
             astra_level=spec['astra_level'], f_break_N=None if np.isinf(spec['f_break_N']) else spec['f_break_N'],
             object_offset_m=spec.get('object_offset_m', 0.), object_turn_deg=spec.get('object_turn_deg', 0.),
