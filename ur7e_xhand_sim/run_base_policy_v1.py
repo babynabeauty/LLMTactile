@@ -55,6 +55,8 @@ def main():
     p.add_argument('--demo', type=Path, required=True, help='v1 demo.json; its reference.json is the ICL example')
     p.add_argument('--placement-json', type=json.loads, default={})
     p.add_argument('--max-turns', type=int, default=12)
+    p.add_argument('--online', action='store_true',
+                   help='Require a server whose 60 Hz controller continues during model inference')
     args = p.parse_args()
 
     def call(name, payload=None):
@@ -76,6 +78,16 @@ def main():
     demo = json.loads(args.demo.read_text())
     example = SuccessContext(args.demo.parent/demo['reference'])
     text = instructions(demo)
+    if args.online:
+        if not call('status').get('online_control'):
+            raise ValueError('--online requires server.py --online')
+        text = text.replace('Physics pauses during your decisions.',
+            'Physics and the 60 Hz tactile controller continue during your decisions.')
+        text = text.replace('No tactile correction runs in this\nexecutor',
+            'The configured low-level controller handles tactile correction in this executor')
+        text += ('\nYou remain the low-frequency skill planner. The executor holds the latest nominal '
+                 'target between skills while tactile control continues. Do not issue finger corrections '
+                 'or force choices. Observation IDs identify decision snapshots, not the latest servo tick.\n')
     (out/'instructions.txt').write_text(text)
     (out/'demonstration_context.json').write_text(json.dumps({'metadata': example.metadata(), 'frames': example.frames}, indent=2))
     policy = current = None

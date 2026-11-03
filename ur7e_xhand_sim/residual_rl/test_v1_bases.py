@@ -39,7 +39,7 @@ class BaseLibraryTest(unittest.TestCase):
         trajectory = write_trajectory(self.folder/'control.jsonl')
         _, (base,) = load_library(write_library(self.folder, trajectory))
         self.assertEqual(base.takeover_tick, 600)            # close starts at 2.0 s
-        self.assertEqual(base.end_tick, int(np.ceil(7.25*15))*20)
+        self.assertEqual(base.end_tick, 2175)               # exact 7.25 s, no extra 15 Hz hold
         self.assertAlmostEqual(base.hold_start_s, 4.25)
         np.testing.assert_allclose(base.object_quaternion, [1, 0, 0, 0])
 
@@ -51,6 +51,11 @@ class BaseLibraryTest(unittest.TestCase):
         short_hold = PHASE_SECONDS[:-1]+(('hold', 2.),)
         trajectory = write_trajectory(self.folder/'control.jsonl', short_hold)
         with self.assertRaisesRegex(ValueError, 'final 3 s'):
+            load_library(write_library(self.folder, trajectory))
+
+    def test_rejects_base_recorded_at_wrong_command_rate(self):
+        trajectory = write_trajectory(self.folder/'control.jsonl', dt=1/30)
+        with self.assertRaisesRegex(ValueError, '60 Hz'):
             load_library(write_library(self.folder, trajectory))
 
     def test_unrepairable_bases_never_train(self):

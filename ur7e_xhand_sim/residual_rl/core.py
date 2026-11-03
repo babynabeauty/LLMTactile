@@ -55,6 +55,8 @@ class Trajectory:
                 explicit_gains.append('grip_gain' in row)
         self.times = np.asarray(times, dtype=float)
         ends = np.asarray(ends, dtype=float)
+        self.ends = ends
+        self._tick_grids = {}
         self.targets = np.asarray(targets, dtype=float)
         self.phases = np.asarray(phases)
         self.command_grip_gains = np.asarray(grip_gains,dtype=float)
@@ -81,6 +83,33 @@ class Trajectory:
         t = np.asarray(time_s)
         return np.stack([np.interp(t, self.times, self.targets[:, i])
                          for i in range(self.targets.shape[1])], axis=-1)
+
+    def ticks(self, physics_hz=300):
+        """Quantize timestamps once; reject commands not on the physics grid."""
+        if physics_hz not in self._tick_grids:
+            timestamps = np.r_[self.times, self.duration_s]*physics_hz
+            ticks = np.rint(timestamps).astype(np.int64)
+            if not np.allclose(timestamps, ticks, rtol=0, atol=1e-6):
+                raise ValueError('Recorded commands must align with the physics tick grid')
+            self._tick_grids[physics_hz] = ticks
+        return self._tick_grids[physics_hz]
+
+    def command_index_at_tick(self, tick, physics_hz=300):
+        """Recorded command hold, without floating-point boundary drift."""
+        tick = np.asarray(tick)
+        if not np.isfinite(tick).all() or np.any(tick != np.rint(tick)):
+            raise ValueError('Command queries require finite integer physics ticks')
+        starts = self.ticks(physics_hz)[:-1]
+        return np.clip(np.searchsorted(starts, tick, side='right')-1, 0, len(starts)-1)
+
+    def target_at_tick(self, tick, physics_hz=300):
+        return self.targets[self.command_index_at_tick(tick, physics_hz)]
+
+    def grip_gain_at_tick(self, tick, physics_hz=300):
+        return self.command_grip_gains[self.command_index_at_tick(tick, physics_hz)]
+
+    def phase_at_tick(self, tick, physics_hz=300):
+        return self.phases[self.command_index_at_tick(tick, physics_hz)]
 
     def phase(self, time_s):
         index = np.clip(np.searchsorted(self.times, time_s, side='right') - 1,

@@ -12,6 +12,7 @@ import json
 import math
 import sys
 import types
+from copy import deepcopy
 
 import numpy as np
 import torch
@@ -47,7 +48,8 @@ For locate, give a tight bounding box around the orange object in scene_front ON
 width/height in stack.image_sizes_px, in [x1,y1,x2,y2] order; exclude the hand. For approach select
 an exact supplied candidate offset; for align and close preserve it. Other offsets and non-locate
 boxes must be zero.
-close moves the fingers straight to the demonstrated closed hand. No tactile correction runs in this
+approach lightly closes the initially open hand during arm travel.
+close completes the finger closure and any demonstrated descent from the pregrasp pose. No tactile correction runs in this
 executor and lifting is never blocked. Always continue through test_lift, lift and hold even if the
 grasp looks poor; an independent evaluation scores the result. Return done with skill=none after
 hold, or abort with skill=none only after an executor error. Do not repeat skills invalid in the
@@ -91,9 +93,16 @@ class BasePolicyV1:
         self.out = HERE.parent/'outputs/base_policy_v1'/label
         self.out.mkdir(parents=True, exist_ok=False)
         self.phase, self.proposals, self.offset = 'unregistered', None, np.zeros(3)
+        self.online, self.residual_controller = False, None
+        self.nominal = np.asarray(sim.target, float).copy()
+        self.last_nominal_phase = 'approach'
         self.log, self.evaluation, self.index, self.finished, self.failed = [], [], 0, False, None
         self.hand_shape = demo['hand_shape']
         self.open = np.clip(demo['open_hand_rad'], sim.lower[6:], sim.upper[6:])
+        self.close_translation = np.asarray(demo.get('close_translation_m', [0., 0., 0.]), float)
+        if (self.close_translation.shape != (3,) or not np.isfinite(self.close_translation).all()
+                or np.linalg.norm(self.close_translation) > .1):
+            raise ValueError('Invalid demonstrated close translation')
         self.closed = np.clip(demo['closed_hand_rad'], sim.lower[6:], sim.upper[6:])
         self.grasp_quat = np.asarray(demo['palm_quaternion_wxyz'], float)
         self.rotation = Rotation.from_quat(self.grasp_quat[[1, 2, 3, 0]]).as_matrix()
@@ -126,13 +135,33 @@ class BasePolicyV1:
         write(self.out/'manifest.json', dict(method='BasePolicyV1', v1_demo=self.demo_path,
             hand_shape=self.hand_shape, placement=self.placement, grip_gain=self.grip_gain,
             open_hand=self.open.tolist(), closed_hand=self.closed.tolist(),
+            close_translation_m=self.close_translation.tolist(),
             grasp_quaternion_wxyz=self.grasp_quat.tolist(), object_center_in_palm_m=self.grasp_center.tolist(),
             object_spec=sim.object_spec.protocol(), solver_profile=sim.solver_profile,
             camera_views=sim.camera_views, control_dt_s=sim.control_dt_s,
             rule_controller=None, lift_support_gate=None, astra_force_choice=None,
             closure='fixed interpolation from the open to the demonstrated closed hand',
             success='object bottom > table + .05 m for the final 3 simulated seconds, no execution fault'))
+        self.nominal = sim.target.copy()
         self.capture()
+
+    def configure_online(self, residual_checkpoint=None, zero_residual=False, astra_level=4):
+        """Enable resumable skills and a causal actor on the simulator owner thread."""
+        if self.index or self.finished:
+            raise ValueError('Configure online control before the first skill')
+        from online_residual import OnlineResidual
+        self.residual_controller = OnlineResidual(self.sim, self.hand_shape, self.grip_gain,
+            checkpoint=residual_checkpoint, zero=zero_residual, astra_level=astra_level)
+        self.online = True
+        self._captured_observation = self._live_observation()
+        self.sim.render_enabled = False
+        protocol = self.residual_controller.protocol()
+        write(self.out/'online_protocol.json', protocol)
+        manifest = json.loads((self.out/'manifest.json').read_text())
+        manifest.update(online_control=True, residual_controller=protocol,
+            recorded_target='actual command after residual; nominal_target records the independent base command')
+        write(self.out/'manifest.json', manifest)
+        return protocol
 
     # ------------------------------------------------------------ observation
     def state(self):
@@ -153,7 +182,9 @@ class BasePolicyV1:
     def capture(self):
         s = self.sim
         s.render_enabled = True
-        s.render()
+        # Placement setters do not advance physics time. Invalidate Genesis'
+        # render cache so the initial RGB and depth reflect the new placement.
+        s.render(force_render=True)
         folder = self.out/f'view_{self.index:03d}'
         folder.mkdir(exist_ok=True)
         for name, data in s.image_bytes.items():
@@ -169,23 +200,47 @@ class BasePolicyV1:
         depth = (self.cloud_image-np.asarray(view['position_m']))@forward
         self.mask = self.mask & (depth > view['near_m']) & (depth < view['far_m'])
         self.stamp, self.current_folder = (s.episode, s.steps), folder
+        self._captured_observation = self._live_observation()
+        if self.online:
+            s.render_enabled = False
         return self.observe()
 
     def observe(self):
+        # A low-frequency action acknowledges a captured RGB-D revision. Physics
+        # may advance while Astra thinks; that does not invalidate the revision.
+        if self.online:
+            return deepcopy(self._captured_observation)
+        return self._live_observation()
+
+    def _live_observation(self):
         s = self.sim
-        return {'observation_id': f'{s.episode}:{s.steps}:{self.index}', 'phase': self.phase,
+        episode, step = self.stamp if self.online else (s.episode, s.steps)
+        return {'observation_id': f'{episode}:{step}:{self.index}', 'phase': self.phase,
+                'online_control': self.online,
                 'observation': s.observe(), 'support': self.support(), 'proposals': self.proposals,
                 'selected_offset_xyz_m': self.offset.tolist(),
                 'alignment_palm_world_m': self.alignment.tolist() if hasattr(self, 'alignment') else None,
                 'image_dir': str(self.current_folder), 'run_dir': str(self.out), 'fault': self.failed}
 
     # ---------------------------------------------------------------- motion
-    def _tick(self, target, phase):
+    def _tick(self, target, phase, future=None):
         s = self.sim
-        s.step({'actions': dict(zip(s.names, ((target-s.offset)/s.scale).tolist())), 'steps': 1})
+        self.nominal = np.asarray(target, float).copy()
+        self.last_nominal_phase = phase
+        if self.residual_controller is not None:
+            target = self.residual_controller.apply(self.nominal, self.nominal if future is None else future, phase)
+        observation = s.step({'actions': dict(zip(s.names, ((target-s.offset)/s.scale).tolist())), 'steps': 1})
+        if self.residual_controller is not None:
+            self.residual_controller.after_step()
         # Tactile summaries only: per-taxel arrays (~50 kB a row) are never read from the bridge log.
-        self.record.write(json.dumps({'step': s.steps, 'phase': phase, 'target': target.tolist(),
-                                      'observation': s.observe()})+'\n')
+        row = {'step': s.steps, 'phase': phase, 'target': target.tolist(), 'observation': observation}
+        if self.online:
+            row.update(nominal_target=self.nominal.tolist(),
+                residual_rad=self.residual_controller.residual.tolist(),
+                residual_action_joints=self.residual_controller.action_joints.tolist(),
+                actor_active=self.residual_controller.started,
+                actor_inferences=self.residual_controller.inferences)
+        self.record.write(json.dumps(row)+'\n')
         # Privileged data goes only to a separate evaluation stream, never policy observations.
         e = s.evaluate()
         e.update(step=s.steps, phase=phase)
@@ -197,33 +252,67 @@ class BasePolicyV1:
             write(self.out/'contact_guard_stop.json', dict(step=s.steps, phase=phase, **guard))
             raise ValueError(guard['reason'])
 
-    def move(self, position, hand, phase):
-        """Straight palm path while turning to the demonstrated grasp orientation."""
+    def _move_targets(self, position, hand):
+        """Yield nominal targets without stepping physics (at most one tick ahead)."""
         s = self.sim
         start, q0 = s.array(s.wrist.get_pos()).reshape(3), s.array(s.wrist.get_quat()).reshape(4)
-        hand0 = s.target[6:].copy()
+        hand0 = (self.nominal if self.online else s.target)[6:].copy()
         rotations = Rotation.from_quat(np.stack([q0[[1, 2, 3, 0]], self.grasp_quat[[1, 2, 3, 0]]]))
         turn, slerp = (rotations[0].inv()*rotations[1]).magnitude(), Slerp([0, 1], rotations)
         m = BASE_MOTION
         count = max(m['min_ticks'], int(np.ceil(np.linalg.norm(position-start)/m['position_m_per_tick'])),
                     int(np.ceil(np.max(np.abs(hand-hand0))/m['hand_rad_per_tick'])), int(np.ceil(turn/m['turn_rad_per_tick'])))
+        for i in range(1, count+1):
+            f = i/count
+            q, err = s.robot.inverse_kinematics(s.wrist, pos=start+(position-start)*f,
+                quat=slerp(f).as_quat()[[3, 0, 1, 2]], dofs_idx_local=s.arm_indices, return_error=True,
+                max_solver_iters=80, seed=42)
+            err = s.array(err).reshape(-1)
+            if np.linalg.norm(err[:3]) > .004 or np.linalg.norm(err[3:]) > .03:
+                raise ValueError('IK failed along skill path')
+            target = s.array(q).reshape(-1)[s.indices]
+            target[6:] = hand0+(hand-hand0)*f
+            yield target
+        for _ in range(m['settle_ticks']):
+            yield target.copy()
+
+    def _move_iter(self, position, hand, phase):
+        s = self.sim
         s.render_enabled = False
         try:
-            for i in range(1, count+1):
-                f = i/count
-                q, err = s.robot.inverse_kinematics(s.wrist, pos=start+(position-start)*f,
-                    quat=slerp(f).as_quat()[[3, 0, 1, 2]], dofs_idx_local=s.arm_indices, return_error=True,
-                    max_solver_iters=80, seed=42)
-                err = s.array(err).reshape(-1)
-                if np.linalg.norm(err[:3]) > .004 or np.linalg.norm(err[3:]) > .03:
-                    raise ValueError('IK failed along skill path')
-                target = s.array(q).reshape(-1)[s.indices]
-                target[6:] = hand0+(hand-hand0)*f
-                self._tick(target, phase)
-            for _ in range(m['settle_ticks']):
-                self._tick(target, phase)
+            targets = iter(self._move_targets(position, hand))
+            if not self.online:
+                for target in targets:
+                    self._tick(target, phase)
+                    yield None
+            else:
+                # Actor lookahead is causal: only this already-accepted skill.
+                target = next(targets)
+                while True:
+                    future = next(targets, None)
+                    self._tick(target, phase, future=target if future is None else future)
+                    yield None
+                    if future is None:
+                        break
+                    target = future
         finally:
-            s.render_enabled = True
+            s.render_enabled = not self.online
+
+    def move(self, position, hand, phase):
+        """Synchronous compatibility wrapper over the resumable motion."""
+        for _ in self._move_iter(position, hand, phase):
+            pass
+
+    def idle_tick(self):
+        """Keep the physical tactile loop running while no skill is accepted."""
+        if not self.online or self.finished or self.failed:
+            return
+        try:
+            self.sim.render_enabled = False
+            self._tick(self.nominal.copy(), self.last_nominal_phase)
+        except Exception as exc:
+            self.failed = str(exc)
+            raise
 
     def locate(self, roi):
         x1, y1, x2, y2 = roi
@@ -240,7 +329,8 @@ class BasePolicyV1:
         self.anchor = np.r_[xy, (np.median(top[:, 2])+.20)/2]
         self.alignment = self.anchor-self.rotation@self.grasp_center
         palm = np.eye(4)
-        palm[:3, :3], palm[:3, 3] = self.rotation, self.alignment
+        # The prior evaluates the closed grasp, below the pregrasp if descent is specified.
+        palm[:3, :3], palm[:3, 3] = self.rotation, self.alignment+self.close_translation
         tool = palm@np.linalg.inv(self.tool_to_palm)
         toolpose = np.r_[tool[:3, 3], Rotation.from_matrix(tool[:3, :3]).as_rotvec()]
         with torch.device('cpu'):
@@ -252,10 +342,20 @@ class BasePolicyV1:
         return {'status': 'located', 'point_count': len(cloud)}
 
     def execute(self, payload):
+        """Original blocking API, driven by exactly the same resumable executor."""
+        run = self.execute_iter(payload)
+        while True:
+            try:
+                next(run)
+            except StopIteration as done:
+                return done.value
+
+    def execute_iter(self, payload):
         if self.finished:
             raise ValueError('Trial finished; start a new unique run')
         action = SkillAct.model_validate(payload)
-        if action.observation_id != self.observe()['observation_id'] or self.stamp != (self.sim.episode, self.sim.steps):
+        if (action.observation_id != self.observe()['observation_id']
+                or (not self.online and self.stamp != (self.sim.episode, self.sim.steps))):
             raise ValueError('Stale observation; refresh policy observation')
         if self.failed:
             raise ValueError('Trial stopped after execution fault')
@@ -285,27 +385,29 @@ class BasePolicyV1:
                     # Move horizontally above the workpiece before descending.
                     high = position.copy()
                     high[2] = max(self.sim.values(self.sim.wrist.get_pos())[2], position[2]+.10)
-                    self.move(high, self.open, 'approach')
-                    self.move(position+np.array([0, 0, .10]), self.open, 'approach')
+                    start_hand = (self.nominal if self.online else self.sim.target)[6:].copy()
+                    yield from self._move_iter(high, start_hand+.4*(self.open-start_hand), 'approach')
+                    yield from self._move_iter(position+np.array([0, 0, .10]), start_hand+.75*(self.open-start_hand), 'approach')
                     self.phase = 'approached'
                 elif action.skill == 'align':
-                    self.move(position, self.open, 'align')
+                    yield from self._move_iter(position, self.open, 'align')
                     self.phase = 'aligned'
                 elif action.skill == 'close':
-                    self.move(position, self.closed, 'close')
+                    yield from self._move_iter(position+self.close_translation, self.closed, 'close')
                     self.phase = 'contact'
                 elif action.skill in ('test_lift', 'lift'):
                     pos = self.sim.array(self.sim.wrist.get_pos()).reshape(3)
                     pos[2] += .02 if action.skill == 'test_lift' else .08
-                    self.move(pos, self.closed, action.skill)
+                    yield from self._move_iter(pos, self.closed, action.skill)
                     self.phase = 'test_lifted' if action.skill == 'test_lift' else 'lifted'
                 else:
                     self.sim.render_enabled = False
                     try:
                         for _ in range(round(3/self.sim.control_dt_s)):
-                            self._tick(self.sim.target.copy(), 'hold')
+                            self._tick((self.nominal if self.online else self.sim.target).copy(), 'hold')
+                            yield None
                     finally:
-                        self.sim.render_enabled = True
+                        self.sim.render_enabled = not self.online
                     self.phase = 'holding'
                 result['status'] = 'executed'
         except Exception as exc:
@@ -327,5 +429,11 @@ class BasePolicyV1:
                  'run_dir': str(self.out), 'evaluation_only': True}
         self.record.close()
         self.eval_record.close()
+        if self.online:
+            from online_residual import strict_online_metrics
+            score['v1_metrics'] = strict_online_metrics(self.out/'control.jsonl', self.evaluation,
+                self.sim.control_dt_s, self.residual_controller.config, self.failed)
+            score['strict_success'] = score['v1_metrics']['strict_success']
+            score['legacy_success_definition'] = 'final hold clearance only; see strict_success for online V1 checks'
         write(self.out/'score.json', score)
         return score

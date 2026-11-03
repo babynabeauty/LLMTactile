@@ -63,6 +63,9 @@ def validate_spec(spec):
         value = np.asarray(spec.get(key), dtype=float)
         if value.shape != (size,) or not np.isfinite(value).all():
             raise ValueError(f'{key} must hold {size} finite numbers')
+    shift = np.asarray(spec.get('close_translation_m', [0., 0., 0.]), float)
+    if shift.shape != (3,) or not np.isfinite(shift).all() or np.linalg.norm(shift) > .1:
+        raise ValueError('close_translation_m must be a finite translation of at most 0.1 m')
     if not .2 <= float(spec.get('grip_gain', 1.)) <= 3.:
         raise ValueError('grip_gain must lie in [.2, 3]')
 
@@ -190,10 +193,11 @@ class SpecDemo:
         pre = align+np.array([0, 0, .12])
         high = pre.copy()
         high[2] = max(pre[2], self.home_pos[2])
-        self.move('preshape', self.home_pos, quat, open_hand, 2.)
+        # Start visibly open; form the light pregrasp during arm travel, not at home.
         self.capture_stage('open')
-        self.move('approach', high, quat, open_hand, 3.)
-        self.move('approach', pre, quat, open_hand, 1.)
+        start_hand = s.target[6:].copy()
+        self.move('approach', high, quat, start_hand+.4*(open_hand-start_hand), 3.)
+        self.move('approach', pre, quat, start_hand+.75*(open_hand-start_hand), 1.)
         self.move('align', align, quat, open_hand, 2.)
         self.capture_stage('aligned')
         if self.touching(self.evals):
@@ -203,13 +207,14 @@ class SpecDemo:
         def first_contact():
             if not any(row['name'] == 'light_contact' for row in self.stages) and self.touching(self.evals[-1:]):
                 self.capture_stage('light_contact')
-        self.linear('close', align, quat, closed, first_contact)
+        grasp = align+np.asarray(c.get('close_translation_m', [0., 0., 0.]), float)
+        self.linear('close', grasp, quat, closed, first_contact)
         if not any(row['name'] == 'light_contact' for row in self.stages):
             raise ValueError('No contact with the object during close')
         self.capture_stage('closed')
-        self.linear('test_lift', align+np.array([0, 0, .02]), quat, closed)
+        self.linear('test_lift', grasp+np.array([0, 0, .02]), quat, closed)
         self.capture_stage('test_lifted')
-        lifted = align+np.array([0, 0, .10])
+        lifted = grasp+np.array([0, 0, .10])
         self.linear('lift', lifted, quat, closed)
         self.capture_stage('lifted')
         for _ in range(45):
@@ -227,7 +232,21 @@ class SpecDemo:
         hold = [e for e in self.evals if e['phase'] == 'hold'][-180:]
         lifted = len(hold) == 180 and min(e['bottom_clearance_m'] for e in hold) >= .05 and not self.failed
         support = bool(hold) and bool(opposing_support(np.stack([object_normals(e) for e in hold]), CONTACT_N).all())
-        score = {'success': bool(lifted and support), 'lifted_and_held': bool(lifted), 'opposing_support_in_hold': support,
+        # Match V1's 5 mm slip criterion before exporting a demonstration.
+        # A lift can otherwise be marked successful while the object rolls/slips in the grasp.
+        relative = []
+        for e, line in zip(self.evals, (self.out/'control.jsonl').read_text().splitlines()):
+            if e['phase'] not in ('test_lift', 'lift', 'hold'):
+                continue
+            observation = json.loads(line)['after']
+            q = np.asarray(observation['wrist_quaternion_wxyz'])
+            rotation = Rotation.from_quat(q[[1, 2, 3, 0]])
+            relative.append(rotation.inv().apply(np.asarray(e['object_position_m'])-
+                                                 observation['wrist_position_m']))
+        max_slip = float(np.linalg.norm(np.asarray(relative)-relative[0], axis=1).max()) if relative else None
+        slip_ok = max_slip is not None and max_slip <= .005
+        score = {'success': bool(lifted and support and slip_ok), 'lifted_and_held': bool(lifted), 'opposing_support_in_hold': support,
+                 'max_slip_m': max_slip, 'slip_within_limit': slip_ok,
                  'fault': self.failed, 'control_steps': len(self.evals), 'hand_shape': self.hand_shape,
                  'hold_min_bottom_clearance_m': min((e['bottom_clearance_m'] for e in hold), default=None)}
         write(self.out/'score.json', score)
@@ -253,6 +272,8 @@ class SpecDemo:
         write(self.out/'trajectory_metadata.json', {'trajectory_sha256': trajectory, 'solver_profile': self.sim.solver_profile})
         write(self.out/'demo.json', {'schema': 'v1_demo', 'object_id': c['object_id'], 'object_spec': c['object_spec'],
             'hand_shape': self.hand_shape, 'palm_offset_m': c['palm_offset_m'],
+            'close_translation_m': c.get('close_translation_m', [0., 0., 0.]),
+            'approach_motion': 'open start, light closure during approach, full closure at pregrasp',
             'palm_quaternion_wxyz': c['palm_quaternion_wxyz'], 'open_hand_rad': c['open_hand_rad'],
             'closed_hand_rad': c['closed_hand_rad'], 'grip_gain': float(c.get('grip_gain', 1.)),
             'object_center_in_palm_m': center_in_palm.tolist(), 'object_initial_position_m': self.initial_object[0],

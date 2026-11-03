@@ -23,7 +23,8 @@ from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnv
 import genesis as gs
 
-from .core import ROOT, RateConfig, hold_success, interval_overlap
+from .core import ROOT, hold_success, interval_overlap
+from .control_protocol import V1_RATES, HISTORY_SAMPLES, current_control_protocol, elapsed_feature
 from .multiobject_geometry import ObjectSpec
 from .solver_profile import normalize_solver_profile, read_solver_readback, validate_solver_readback
 from .tactile_provenance import current_tactile_model
@@ -37,7 +38,7 @@ from platform_asset import build_platform, FLOOR_Z, PLATFORM_POSITION, TABLE_TOP
 PREFIX_CONTACT_LIMIT_N = .05
 STATE_FIELDS = ('q_normalized[18]', 'qd_div_3[18]', 'command_minus_q_div_.2[18]',
     'next_nominal_minus_nominal_div_.1[18]', 'grip_gain_minus_1[1]', f'phase_one_hot{list(PHASES)}',
-    'episode_progress[1]', 'astra_level_one_hot[4]', f'hand_shape_finger_mask{list(FINGERS)}',
+    'elapsed_since_close_div10_clipped[1]', 'astra_level_one_hot[4]', f'hand_shape_finger_mask{list(FINGERS)}',
     'previous_residual_div_bound[action_joints]')
 REWARD_TERMS = ('progress', 'force', 'break_soft', 'slip', 'residual_change', 'terminal')
 
@@ -66,7 +67,7 @@ class V1VecEnv(VecEnv):
                  hand_shape='pinch', action_joints=None, config=None, sampler=None, use_level=True,
                  joint_friction_Nm=(0., 0.), tactile_noise_N=0., fixed_gain=None, augment=False):
         self.render_mode = None
-        self.rates = RateConfig()
+        self.rates = V1_RATES
         self.config = config or V1Config()
         self.sampler = sampler or SamplerConfig()
         self.object_id = object_id
@@ -102,8 +103,8 @@ class V1VecEnv(VecEnv):
         self.finger_mask = np.array([f in HAND_SHAPES[hand_shape] for f in FINGERS], np.float32)
         self.state_dim = 18*4+1+len(PHASES)+1+4+len(FINGERS)+len(self.action_joints)
         observation_space = spaces.Dict({
-            'tactile': spaces.Box(-np.inf, np.inf, (12, 5, 120, 3), np.float32),
-            'state': spaces.Box(-np.inf, np.inf, (12, self.state_dim), np.float32)})
+            'tactile': spaces.Box(-np.inf, np.inf, (HISTORY_SAMPLES, 5, 120, 3), np.float32),
+            'state': spaces.Box(-np.inf, np.inf, (HISTORY_SAMPLES, self.state_dim), np.float32)})
         super().__init__(n_envs, observation_space, spaces.Box(-1., 1., (len(self.action_joints),), np.float32))
         self._build_scene(seed)
         self._capture_takeover_states(augment)
@@ -158,6 +159,7 @@ class V1VecEnv(VecEnv):
                 probe_local_pos=layout['positions_link_m'], probe_radius=.0015, history_length=0,
                 normal_stiffness=500., normal_damping=1., normal_exponent=1.2,
                 shear_scalar=2., twist_scalar=0., draw_debug=False)))
+        self._configure_rendering()
         self.scene.build(n_envs=self.num_envs)
         self.names = ARM_JOINTS+HAND_JOINTS
         self.indices = [self.robot.get_joint(n).dofs_idx_local[0] for n in self.names]
@@ -184,6 +186,15 @@ class V1VecEnv(VecEnv):
         self.gains = np.full(self.num_envs, np.nan, np.float32)
         self.mass = np.full(self.num_envs, .1)
         self.mu = np.full(self.num_envs, .8)
+
+    def _configure_rendering(self):
+        """Optional observation-only camera setup before the scene is built."""
+
+    def _on_prefix_step(self, lane_bases, tick):
+        """Optional observation-only recording of the physically replayed prefix."""
+
+    def _on_episode_step(self, done, infos):
+        """Optional recording after evaluation, before terminal lanes are reset."""
 
     def _set_materials(self, lanes, mass, mu):
         lanes = np.asarray(lanes)
@@ -285,8 +296,8 @@ class V1VecEnv(VecEnv):
     def _replay_prefixes(self, jobs):
         """Replay (base, object position, object quaternion) prefixes once, in parallel lanes.
 
-        Lanes whose takeover comes earlier hold their takeover command until the
-        group finishes. Contact is only audited before each lane's own takeover.
+        Capture each lane at its own takeover, even if another prefix is longer.
+        Contact is only audited before each lane's own takeover.
         """
         n, records = self.num_envs, []
         lanes = np.arange(n)
@@ -300,24 +311,37 @@ class V1VecEnv(VecEnv):
             self.cube.set_quat(np.stack([job[2] for job in lane_jobs]))
             self._set_materials(lanes, np.full(n, .05), np.full(n, .8))
             contact = np.zeros(n)
+            captured = [None]*len(group)
+
+            def capture(tick):
+                owners = [i for i in range(len(group)) if takeover[i] == tick]
+                if not owners:
+                    return
+                q = cpu(self.robot.get_dofs_position(self.indices)).reshape(n, 18)
+                position = cpu(self.cube.get_pos()).reshape(n, 3)
+                quaternion = cpu(self.cube.get_quat()).reshape(n, 4)
+                palm = cpu(self.palm.get_quat()).reshape(n, 4)
+                for i in owners:
+                    captured[i] = dict(q=q[i].copy(), object_position=position[i].copy(),
+                        object_quaternion=quaternion[i].copy(), palm_quaternion=palm[i].copy(),
+                        prefix_contact_N=float(contact[i]))
+
+            capture(0)
             print(f'PREFIX {first}-{first+len(group)-1} of {len(jobs)}, {takeover.max()} ticks', flush=True)
             for tick in range(int(takeover.max())):
                 if tick % self.rates.action_stride == 0:
-                    t = np.minimum(tick, takeover)/self.rates.physics_hz
-                    self._set_gains(lanes, [b.trajectory.grip_gain_at(ti) for b, ti in zip(lane_bases, t)])
-                    self.robot.control_dofs_position(np.stack([b.trajectory.target(ti)
-                        for b, ti in zip(lane_bases, t)]), self.indices)
+                    ticks = np.minimum(tick, takeover)
+                    self._set_gains(lanes, [b.trajectory.grip_gain_at_tick(ti) for b, ti in zip(lane_bases, ticks)])
+                    self.robot.control_dofs_position(np.stack([b.trajectory.target_at_tick(ti)
+                        for b, ti in zip(lane_bases, ticks)]), self.indices)
                 self.scene.step()
+                self._on_prefix_step(lane_bases, tick+1)
                 if (tick+1) % self.rates.tactile_stride == 0:
                     contact = np.maximum(contact, np.where(tick < takeover, self.region_normal_force().sum(-1), 0.))
-            q = cpu(self.robot.get_dofs_position(self.indices)).reshape(n, 18)
-            position = cpu(self.cube.get_pos()).reshape(n, 3)
-            quaternion = cpu(self.cube.get_quat()).reshape(n, 4)
-            palm = cpu(self.palm.get_quat()).reshape(n, 4)
-            for i in range(len(group)):
-                records.append(dict(q=q[i].copy(), object_position=position[i].copy(),
-                    object_quaternion=quaternion[i].copy(), palm_quaternion=palm[i].copy(),
-                    prefix_contact_N=float(contact[i])))
+                capture(tick+1)
+            if any(record is None for record in captured):
+                raise RuntimeError('A prefix did not reach its exact takeover tick')
+            records.extend(captured)
         return records
 
     def _capture_takeover_states(self, augment):
@@ -375,11 +399,13 @@ class V1VecEnv(VecEnv):
         self.specs, self.next_spec = list(specs), 0
 
     def _targets(self, t):
-        return np.stack([self.bases[k].trajectory.target(ti) for k, ti in zip(self.lane_base, t)])
+        ticks = np.rint(np.asarray(t)*self.rates.physics_hz).astype(np.int64)
+        return np.stack([self.bases[k].trajectory.target_at_tick(ti) for k, ti in zip(self.lane_base, ticks)])
 
     def _base_gain(self, t):
         if self.fixed_gain is None:
-            return np.array([self.bases[k].trajectory.grip_gain_at(ti) for k, ti in zip(self.lane_base, t)])
+            ticks = np.rint(np.asarray(t)*self.rates.physics_hz).astype(np.int64)
+            return np.array([self.bases[k].trajectory.grip_gain_at_tick(ti) for k, ti in zip(self.lane_base, ticks)])
         return np.full(self.num_envs, float(self.fixed_gain))
 
     def _draw(self):
@@ -459,8 +485,8 @@ class V1VecEnv(VecEnv):
             setattr(self, name, np.zeros(n))
         self.hold_support_ok = np.ones(n, dtype=bool)
         self.terms = np.zeros((n, len(REWARD_TERMS)))
-        self.history = np.zeros((n, 12, 5, 120, 3), np.float32)
-        self.proprio = np.zeros((n, 12, self.state_dim), np.float32)
+        self.history = np.zeros((n, HISTORY_SAMPLES, 5, 120, 3), np.float32)
+        self.proprio = np.zeros((n, HISTORY_SAMPLES, self.state_dim), np.float32)
         self._reset_lanes(np.arange(n))
         self._pending_action = None
         return self._obs()
@@ -471,9 +497,9 @@ class V1VecEnv(VecEnv):
         qd = cpu(self.robot.get_dofs_velocity(self.indices)).reshape(n, 18)
         t = self.lane_tick/self.rates.physics_hz
         nominal, future = self._targets(t), self._targets(t+self.rates.action_dt)
-        phase = np.array([[self.bases[k].trajectory.phase(ti) == p for p in PHASES]
-                          for k, ti in zip(self.lane_base, t)], np.float32)
-        progress = (self.lane_tick-self.lane_start)/np.maximum(self.lane_end-self.lane_start, 1)
+        phase = np.array([[self.bases[k].trajectory.phase_at_tick(ti) == p for p in PHASES]
+                          for k, ti in zip(self.lane_base, self.lane_tick)], np.float32)
+        progress = elapsed_feature((self.lane_tick-self.lane_start)/self.rates.physics_hz)
         level = np.eye(4, dtype=np.float32)[self.astra_level-1]*self.use_level
         state = np.concatenate([(q-self.mid)/self.half, np.clip(qd/3, -10, 10), (self.command-q)/.2,
             (future-nominal)/.1, (self.gains-1)[:, None], phase, progress[:, None], level,
@@ -576,8 +602,9 @@ class V1VecEnv(VecEnv):
                 reason[i] = 'success' if success[i] else ('no_opposing_support' if self.hold_duration[i] >= 3-1e-6
                     and self.hold_min[i] >= .05 else 'hold_failed')
             infos[i] = dict(episode_metrics=self._episode_metrics(i, bool(success[i]), reason[i]),
-                episode={'r': float(self.returns[i]), 'l': int(round(self.elapsed[i]*15))},
+                episode={'r': float(self.returns[i]), 'l': int(round(self.elapsed[i]*self.rates.action_hz))},
                 terminal_observation={k: v[i].copy() for k, v in obs.items()}, **{'TimeLimit.truncated': False})
+        self._on_episode_step(done, infos)
         if len(lanes):
             self._reset_lanes(lanes)
             obs = self._obs()
@@ -611,7 +638,8 @@ class V1VecEnv(VecEnv):
     # -------------------------------------------------------------- protocol
     def _write_protocol(self):
         protocol = dict(variant='v1_takeover_residual', object_id=self.object_id,
-            object_spec=self.object_spec.protocol(), physics_hz=300, tactile_hz=60, action_hz=15,
+            object_spec=self.object_spec.protocol(), **asdict(self.rates),
+            base_hz=60, control_protocol=current_control_protocol(),
             config=asdict(self.config), sampler=asdict(self.sampler), use_level=self.use_level,
             joint_friction_Nm=list(self.joint_friction_Nm), tactile_noise_N=self.tactile_noise_N,
             fixed_gain=self.fixed_gain, tactile_model=current_tactile_model(),
@@ -619,10 +647,10 @@ class V1VecEnv(VecEnv):
             actor_state_fields=list(STATE_FIELDS), state_dim=self.state_dim, privileged_actor_input=False,
             hand_shape=self.hand_shape, hand_shape_fingers=list(HAND_SHAPES[self.hand_shape]),
             action_joints=self.action_joints.tolist(), active_action_joints=self.active.tolist(),
-            action='absolute residual on hand-local action_joints; [-1,1] -> +-bound, rate limited per 15 Hz '
+            action='absolute residual on hand-local action_joints; [-1,1] -> +-bound, rate limited per 60 Hz '
                    'action; joints outside this hand shape stay at the base command',
             grip_gain='recorded grip gain scales kp (kv by sqrt) of the hand-shape finger joints',
-            takeover="first 'close' command floored to the 15 Hz grid",
+            takeover="first 'close' command on the 60 Hz grid; each lane captured at its own takeover tick",
             reset='robot joints and object pose set to the replayed takeover state; material, fragility and joint '
                   'friction resampled per episode; no contact exists at takeover',
             base_draw='uniform over bases, R capped at sampler.r_max_fraction of draws; a sampler.s_offset_fraction '

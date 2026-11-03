@@ -98,6 +98,8 @@ def plan_jobs(config):
 def convert(bridge, run_dir):
     """S8V4 log -> residual base trajectory, after checking the hand followed the demonstration."""
     manifest = json.loads((bridge/'manifest.json').read_text())
+    if manifest.get('online_control'):
+        raise ValueError('Online combined commands are not base-only collection trajectories')
     rows = [json.loads(line) for line in (bridge/'control.jsonl').open()]
     phases = [r['phase'] for r in rows]
     if [r['step'] for r in rows] != list(range(1, len(rows)+1)):

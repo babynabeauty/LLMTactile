@@ -11,6 +11,8 @@ from pathlib import Path
 import numpy as np
 
 from .v1_bases import load_experiment, sha256
+from .control_protocol import current_control_protocol, require_checkpoint_control_compatibility
+from .tactile_provenance import require_checkpoint_tactile_compatibility
 from .v1_task import episode_specs
 
 DEFAULT_MATERIALS = [[m, u] for m in (.08, .12, .18) for u in (.3, .45, .7)]
@@ -72,11 +74,14 @@ def main(argv=None):
     p.add_argument('--method', choices=sorted(METHODS), default='tactile')
     args = p.parse_args(argv)
     experiment = load_experiment(args.experiment_json)
+    require_checkpoint_control_compatibility(args.checkpoint)
+    require_checkpoint_tactile_compatibility(args.checkpoint)
     args.output.mkdir(parents=True, exist_ok=False)
     env = build_environment(experiment, {'levels': args.levels}, args.output, seed=args.seed, method=args.method,
         lanes=args.lanes, fixed_gain=args.fixed_gains[0] if args.fixed_gains else None,
         split=args.split, labels=tuple(args.labels))
     summary = dict(experiment_sha256=sha256(args.experiment_json), split=args.split, labels=args.labels,
+                   control_protocol=current_control_protocol(),
                    materials=args.materials, levels=args.levels, seed=args.seed)
     try:
         controllers = {}

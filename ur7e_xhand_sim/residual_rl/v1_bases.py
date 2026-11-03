@@ -12,6 +12,7 @@ from pathlib import Path
 import numpy as np
 
 from .core import Trajectory
+from .control_protocol import V1_RATES, current_control_protocol, migrate_experiment
 from .solver_profile import trajectory_solver_profile
 from .v1_task import HAND_SHAPES, action_joints, takeover_tick
 
@@ -62,7 +63,10 @@ class Base:
         if t.phase_starts['hold'] > self.hold_start_s+1e-8 or np.any(t.phases[t.times >= t.phase_starts['hold']] != 'hold'):
             raise ValueError(f'{self.base_id}: the final 3 s must be one uninterrupted hold')
         self.takeover_tick = takeover_tick(t.phase_starts)
-        self.end_tick = int(np.ceil(t.duration_s*15-1e-9))*20
+        ticks = t.ticks(V1_RATES.physics_hz)
+        if np.any(ticks % V1_RATES.action_stride) or np.any(np.diff(ticks) != V1_RATES.action_stride):
+            raise ValueError(f'{self.base_id}: V1 requires one recorded command per 60 Hz tick')
+        self.end_tick = int(ticks[-1])
         self.object_position = np.asarray(entry['object_initial_position_m'], dtype=float)
         self.object_quaternion = np.asarray(entry.get('object_initial_quaternion_wxyz', [1, 0, 0, 0]), dtype=float)
         if self.object_position.shape != (3,) or self.object_quaternion.shape != (4,):
@@ -112,7 +116,7 @@ def load_experiment(path):
     names = [s['name'] for s in data['stages']]
     if len(set(names)) != len(names):
         raise ValueError('Duplicate stage names')
-    return data
+    return migrate_experiment(data)
 
 
 def experiment_action_joints(experiment, libraries):
@@ -124,11 +128,11 @@ def experiment_action_joints(experiment, libraries):
     return action_joints(shapes)
 
 
-TRAINING_DEFAULTS = dict(n_steps=128, batch_size=256, n_epochs=5, learning_rate=3e-4, gamma=1., gae_lambda=.95,
-    use_sde=True, normalize_sde_latent=True, sde_sample_freq=30, action_std_init=.12, adam_eps=1e-5,
-    seeds=[1, 2, 3], methods=['tactile', 'no_tactile', 'tactile_no_level'], checkpoint_every=65536)
-STAGES = [dict(name='stage1', levels=[4], requested_timesteps=655360),
-          dict(name='stage2', levels=[1, 2, 3, 4], requested_timesteps=655360, resume_previous=True)]
+TRAINING_DEFAULTS = dict(n_steps=512, batch_size=1024, n_epochs=5, learning_rate=3e-4, gamma=1., gae_lambda=.95**.25,
+    use_sde=True, normalize_sde_latent=True, sde_sample_freq=120, action_std_init=.12, adam_eps=1e-5,
+    seeds=[1, 2, 3], methods=['tactile', 'no_tactile', 'tactile_no_level'], checkpoint_every=262144)
+STAGES = [dict(name='stage1', levels=[4], requested_timesteps=2621440),
+          dict(name='stage2', levels=[1, 2, 3, 4], requested_timesteps=2621440, resume_previous=True)]
 
 
 def write_experiment(path, libraries, *, lanes_per_object=4, hand_shapes=None, name='v1'):
@@ -141,7 +145,8 @@ def write_experiment(path, libraries, *, lanes_per_object=4, hand_shapes=None, n
                             base_library=str(Path(library).resolve())))
     experiment = dict(schema=EXPERIMENT_SCHEMA, name=name, objects=objects, lanes_per_object=lanes_per_object,
         hand_shapes=sorted(hand_shapes or shapes), config={}, sampler={}, joint_friction_Nm=[0., 0.],
-        tactile_noise_N=0., training=TRAINING_DEFAULTS, stages=STAGES)
+        tactile_noise_N=0., training=TRAINING_DEFAULTS, stages=STAGES,
+        control_protocol=current_control_protocol())
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(json.dumps(experiment, indent=2))
     return Path(path)

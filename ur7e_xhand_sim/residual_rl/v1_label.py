@@ -15,6 +15,7 @@ import numpy as np
 
 from .v1_bases import SCHEMA, Base, write_experiment
 from .v1_task import FINGER_JOINTS, HAND_SHAPES, YAW_PERIOD_DEG, SamplerConfig, V1Config, hand_shape_joints, wrap_yaw
+from .control_protocol import current_control_protocol
 
 GRID = (-.15, -.075, 0., .075, .15)
 CONTACT_N = .05
@@ -90,9 +91,11 @@ def label_group(runs, demo, output, lanes, seed):
         replayable = [b for b in env.bases]
         zero = lambda obs: np.zeros((env.num_envs, len(joints)), np.float32)
         replay = run_specs(env, [dict(COLLECTION, base_id=b.base_id) for b in replayable], zero)
+        (output/'zero_residual_episodes.json').write_text(json.dumps(replay, indent=2))
         pending, collected = [], {r['run_id']: bool((r.get('score') or {}).get('success')) for r in runs}
         for i, b in enumerate(replayable):
             row, result = labels[b.base_id], replay[i]
+            row['zero_residual'] = result
             # Slip, missing support and breakage are stricter v1 criteria, not replay errors.
             if collected[b.base_id] != result['success'] and (
                     not collected[b.base_id] or result['termination_reason'] in ('hold_failed', 'collision')):
@@ -115,13 +118,15 @@ def label_group(runs, demo, output, lanes, seed):
                     action[lane] = vectors[spec['candidate']]
             return action
         outcome = run_specs(env, specs, repair) if specs else {}
+        (output/'repair_episodes.json').write_text(json.dumps(outcome, indent=2))
         for index, spec in enumerate(specs):
             row = labels[spec['base_id']]
             if outcome[index]['success'] and row.get('label') != 'R':
-                row.update(label='R', repair_residual_rad={str(j): v for j, v in options[spec['candidate']].items()})
+                row.update(label='R', reason='candidate residual succeeded',
+                           repair_residual_rad={str(j): v for j, v in options[spec['candidate']].items()})
         for b in pending:
-            labels[b.base_id].setdefault('label', 'U')
-            labels[b.base_id].setdefault('reason', 'no candidate residual succeeded')
+            if labels[b.base_id].get('label') != 'R':
+                labels[b.base_id].update(label='U', reason='no candidate residual succeeded')
     finally:
         env.close()
     return labels
@@ -137,6 +142,7 @@ def main(argv=None):
     args = p.parse_args(argv)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
+    (output/'control_protocol.json').write_text(json.dumps(current_control_protocol(), indent=2))
     runs = [json.loads(line) for line in (args.collection/'runs.jsonl').open()]
     groups = {}
     for r in runs:

@@ -58,18 +58,18 @@ class ResidualTest(unittest.TestCase):
     def test_rate_then_bound(self):
         cfg = V1Config()
         r = np.zeros(6)
-        for _ in range(2):
+        for _ in range(8):
             r = limit_residual(np.ones(6), r, cfg)
         np.testing.assert_allclose(r, .1)
         for _ in range(5):
             r = limit_residual(np.ones(6), r, cfg)
         np.testing.assert_allclose(r, .15)
         r = limit_residual(-np.ones(6)*5, r, cfg)
-        np.testing.assert_allclose(r, .1)
+        np.testing.assert_allclose(r, .1375)
 
     def test_rate_can_cancel_fastest_base_closure(self):
-        # The base closes at most hand_rad_per_tick per 60 Hz tick, four ticks per 15 Hz action.
-        self.assertGreaterEqual(V1Config().residual_rate_rad, 4*BASE_MOTION['hand_rad_per_tick'])
+        # Base and tactile policy now both update every 60 Hz tick.
+        self.assertGreaterEqual(V1Config().residual_rate_rad, BASE_MOTION['hand_rad_per_tick'])
 
     def test_rejects_nonfinite(self):
         with self.assertRaises(ValueError):
@@ -127,7 +127,7 @@ class BreakAndSlipTest(unittest.TestCase):
 class TakeoverTest(unittest.TestCase):
     def test_floor_to_action_grid(self):
         self.assertEqual(takeover_tick({'close': 2.0}), 600)
-        self.assertEqual(takeover_tick({'close': 2.05}), 600)
+        self.assertEqual(takeover_tick({'close': 2.05}), 615)
         self.assertEqual(takeover_tick({'close': 2.0667}), 620)
         with self.assertRaises(ValueError):
             takeover_tick({'preload': 1.})

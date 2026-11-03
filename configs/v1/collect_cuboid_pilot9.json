@@ -1,0 +1,17 @@
+{
+  "demos": [
+    "outputs/v1/demos/cuboid_pinch/demo.json",
+    "outputs/v1/demos/cuboid_tripod/demo.json",
+    "outputs/v1/demos/cuboid_wrap/demo.json"
+  ],
+  "scales": [],
+  "skip": [],
+  "unseen": [],
+  "train_placements": 2,
+  "test_placements": 1,
+  "edge_placements": 0,
+  "unseen_placements": 0,
+  "xy_range_m": 0.1,
+  "yaw_range_deg": 10,
+  "seed": 1
+}

@@ -8,6 +8,7 @@ from dataclasses import dataclass, asdict
 import numpy as np
 
 from .multiobject_geometry import ObjectSpec
+from .control_protocol import V1_RATES
 
 GRAVITY = 9.81
 LEVEL_BOUNDS_N = (2., 5., 12.)
@@ -56,7 +57,8 @@ def scaled_object(object_id, object_spec, factor):
 @dataclass(frozen=True)
 class V1Config:
     residual_bound_rad: float = .15
-    residual_rate_rad: float = .05
+    # .75 rad/s, matching .05 rad per legacy 15 Hz action.
+    residual_rate_rad: float = .75/V1_RATES.action_hz
     progress_weight: float = 3.
     force_weight: float = .02
     break_soft_weight: float = 5.
@@ -64,7 +66,8 @@ class V1Config:
     break_consecutive_steps: int = 2
     slip_weight_per_mm: float = 2.
     slip_fail_m: float = .005
-    residual_change_weight: float = .005
+    # Preserve the time integral of normalized squared residual slew speed.
+    residual_change_weight: float = .005*15/V1_RATES.action_hz
     success_bonus: float = 25.
     failure_penalty: float = 200.
     table_fault_N: float = 5.
@@ -230,7 +233,7 @@ def opposing_support(region_normal_N, threshold_N):
     return (touch[:, 0] | touch[:, 5]) & touch[:, 1:5].any(-1)
 
 
-def takeover_tick(phase_starts, physics_hz=300, action_hz=15):
+def takeover_tick(phase_starts, physics_hz=V1_RATES.physics_hz, action_hz=V1_RATES.action_hz):
     """First 'close' command, floored to the action grid, in physics ticks."""
     if 'close' not in phase_starts:
         raise ValueError('v1 bases require a close phase')

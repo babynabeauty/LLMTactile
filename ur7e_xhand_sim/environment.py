@@ -249,7 +249,7 @@ class Sandbox:
     def values(self,value):
         return self.array(value).reshape(-1).astype(float).tolist()
 
-    def render(self):
+    def render(self, force_render=False):
         if not self.render_enabled:
             return
         pos = self.array(self.wrist.get_pos()).reshape(3)
@@ -274,7 +274,7 @@ class Sandbox:
                 lookat=center,up=rotation@np.asarray(up))
         views = [('scene',self.camera),('scene_left',self.rear_camera),('wrist',self.wrist_camera)]+[(f'hand_{n}',c) for n,c in self.hand_cameras.items()]
         for name,camera in views:
-            rgb = self.array(camera.render(rgb=True)[0])
+            rgb = self.array(camera.render(rgb=True, force_render=force_render)[0])
             if rgb.ndim==4:
                 rgb=rgb[0]
             img = Image.fromarray(rgb.astype(np.uint8))

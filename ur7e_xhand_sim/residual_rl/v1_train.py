@@ -8,6 +8,7 @@ Methods differ only in actor inputs: tactile (touch + Astra level), no_tactile
 from __future__ import annotations
 
 import argparse
+from dataclasses import asdict
 from datetime import datetime, timezone
 import hashlib
 import json
@@ -28,6 +29,8 @@ from stable_baselines3.common.vec_env import VecCheckNan
 
 from .adaptive_policy import policy_kwargs
 from .core import ROOT
+from .control_protocol import (V1_RATES, current_control_protocol,
+    require_checkpoint_control_compatibility)
 from .normalized_sde_policy import NormalizedSDEMultiInputPolicy
 from .tactile_provenance import current_tactile_model, require_checkpoint_tactile_compatibility
 from .v1_bases import TRAINING_LABELS, experiment_action_joints, load_experiment, load_library, sha256
@@ -192,6 +195,7 @@ def make_model(env, settings, seed, method, *, resume=None):
     use_touch = METHODS[method]['use_tactile']
     with torch.device('cpu'):
         if resume:
+            require_checkpoint_control_compatibility(resume)
             model = CPUTrainingPPO.load(resume, env=env, device='cpu')
             if model.policy.features_extractor.use_tactile != use_touch:
                 raise ValueError(f'{resume} was trained with a different tactile input than {method}')
@@ -211,6 +215,11 @@ def make_model(env, settings, seed, method, *, resume=None):
                 model.policy.action_net.bias.zero_()
     if model.n_steps*env.num_envs % model.batch_size:
         raise ValueError('Rollout size must divide into complete minibatches')
+    model.control_protocol = current_control_protocol()
+    model.v1_config = asdict(env.get_attr('config')[0])
+    model.action_joints = env.get_attr('action_joints')[0].tolist()
+    model.use_level = bool(METHODS[method]['use_level'])
+    model.method = method
     return model
 
 
@@ -221,17 +230,21 @@ def run(args, experiment):
     requested = args.total_timesteps or int(stage['requested_timesteps'])
     if args.smoke:
         lanes = 2
-        settings.update(n_steps=32, n_epochs=1, batch_size=32*lanes*len(experiment['objects']))
+        settings.update(n_steps=128, n_epochs=1, batch_size=128*lanes*len(experiment['objects']))
         requested = settings['batch_size']
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     env = model = logger = callback = None
     try:
         require_checkpoint_tactile_compatibility(args.resume)
+        require_checkpoint_control_compatibility(args.resume)
         manifest = dict(created_utc=datetime.now(timezone.utc).isoformat(),
             experiment_path=str(args.experiment_json.resolve()), experiment_sha256=sha256(args.experiment_json),
             experiment=experiment, stage=stage, seed=args.seed, method=args.method, inputs=METHODS[args.method],
             smoke=args.smoke, requested_timesteps=requested, training_settings=settings,
+            control_protocol=current_control_protocol(),
+            rollout_duration_per_lane_s=settings['n_steps']/V1_RATES.action_hz,
+            requested_aggregate_sim_duration_s=requested/V1_RATES.action_hz,
             tactile_model=current_tactile_model(), source_sha256=source_snapshot(output),
             input_checkpoint=str(args.resume.resolve()) if args.resume else None,
             input_checkpoint_sha256=sha256(args.resume) if args.resume else None,
@@ -311,7 +324,10 @@ def dry_run(experiment):
     lanes = experiment['lanes_per_object']*len(experiment['objects'])
     t = experiment['training']
     report['rollout'] = dict(total_lanes=lanes, samples=lanes*t['n_steps'],
+                             duration_per_lane_s=t['n_steps']/V1_RATES.action_hz,
                              divisible_by_batch=lanes*t['n_steps'] % t['batch_size'] == 0)
+    report['control_protocol'] = current_control_protocol()
+    report['control_protocol_migration'] = experiment.get('control_protocol_migration')
     print(json.dumps(report, indent=2))
 
 
@@ -324,7 +340,7 @@ def main(argv=None):
     p.add_argument('--stage')
     p.add_argument('--resume', type=Path)
     p.add_argument('--suite', action='store_true')
-    p.add_argument('--smoke', action='store_true', help='2 lanes per object, one 32-step rollout and update')
+    p.add_argument('--smoke', action='store_true', help='2 lanes per object, one 128-step rollout (2.13 s) and update')
     p.add_argument('--dry-run', action='store_true')
     p.add_argument('--total-timesteps', type=int)
     args = p.parse_args(argv)

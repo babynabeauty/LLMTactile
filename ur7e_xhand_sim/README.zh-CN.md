@@ -101,7 +101,7 @@ grep -l 'before close' outputs/v1/size_check/*/score.json
 
 - `demos`：列出所有成功示范。
 - `scales`：每个示范物体缩放后也采训练、测试位置，不采边缘位置。
-- `skip`：第 1 步尺寸检查没通过的组合。
+- `skip`：第 1 步尺寸检查中 close 前已接触的组合；其他抓取失败不跳过。
 - `unseen`：`near` 填最接近的见过物体，该物体的每种手型都会测。
 
 物体离桌边不到 2 cm 时，规划会直接报错。
@@ -155,3 +155,44 @@ done; done
 ```
 
 结果在各输出目录的 `summary.json`。
+
+## 协调接近的两指示范（2026-11-03）
+
+按更新后的用户要求，`v1_demo.py` 不再先在原地完成手型：从初始张开姿态出发，
+接近路径上逐步插值到轻微闭合的 `open_hand_rad`，到预抓取位置后才进入 `close`。
+`close_translation_m` 可指定正式闭合时的手掌位移（世界坐标系，最长 0.1 m）；
+缺省为零。`palm_offset_m` 指的是 **close 开始前的预抓取位置**。
+当前长方体两指参数在正式抓取时下降 0.05 m；这一阶段手指完成主要闭合。
+BasePolicyV1 同步读取此位移；小模型仍从 close 开始接管手指残差。
+
+```bash
+.venv/bin/python ur7e_xhand_sim/v1_demo.py \
+  --spec configs/v1/demos/cuboid_pinch.json \
+  --output outputs/v1/demos/cuboid_pinch
+.venv/bin/python ur7e_xhand_sim/replay_demo_video.py \
+  --demo outputs/v1/demos/cuboid_pinch \
+  --output outputs/v1/demos/cuboid_pinch/video
+```
+
+输出目录必须不存在。视频由独立的关节指令回放生成，不重新运行 IK，也不移动物体。
+示范导出新增滑移验收：test_lift 起物体在手掌系中的最大位移不得超过 5 mm。
+
+## 已采集 base 的零残差回放视频
+
+使用实际 `V1VecEnv` 评估并录制单条 base，原始数据的训练/测试划分不变：
+
+```bash
+.venv/bin/python -m ur7e_xhand_sim.residual_rl.v1_replay_video \
+  --collection outputs/v1/BASE_cuboid_v1_batch01 \
+  --run-id cuboid_pinch_train_000 \
+  --output outputs/v1/BASE_cuboid_v1_batch01/zero_residual_replay/cuboid_pinch_train_000
+```
+
+每条使用一个独立进程，输出目录必须不存在。按原始物体姿态重放接近前缀，随后采用
+V1 标准的闭合前状态恢复（速度清零），以 60 Hz 控制、300 Hz 物理步执行零残差。
+质量固定 50 g、摩擦 0.8、不可碎，保留轨迹记录的增益。视频含三相机及手部近景，
+15 fps、原速播放，在自动重置前记录终止画面；评估失败会按标准提前终止。
+
+输出 `replay.mp4`、`validation.json`、`frames.jsonl`、来源哈希和关键截图。
+`validation.json` 中的 `episode_metrics` 是同一次回放的 V1 指标；成功率不能与仅检查
+抬起保持的采集评分混用。此命令不执行残差修复搜索，也不写入正式 S/R/U 库。
