@@ -37,7 +37,7 @@ class TestMultiObjectSandbox(unittest.TestCase):
         for shape in ('cube','cylinder','sphere'):
             sim.object_spec = ObjectSpec(shape)
             p = sim._initial_object_position((.03,.02,0))
-            np.testing.assert_allclose(p,[-.57,-.1133,.2225],atol=1e-15)
+            np.testing.assert_allclose(p,[-.47,-.1133,.2225],atol=1e-15)
             self.assertAlmostEqual(p[2]-sim.object_spec.bounds_size_m[2]/2,.2,places=14)
             morph = sim._object_morph(p)
             self.assertEqual(morph['type'],{'cube':'Box','cylinder':'Cylinder','sphere':'Sphere'}[shape])

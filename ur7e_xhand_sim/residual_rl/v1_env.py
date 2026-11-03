@@ -32,8 +32,8 @@ from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, REGION
     break_soft_rate, object_offsets, opposing_support, sample_episode, wrap_yaw)
 sys.path.insert(0, str(ROOT/'ur7e_xhand_sim'))
 from build_assets import build, ARM_JOINTS, HAND_JOINTS
+from platform_asset import build_platform, FLOOR_Z, PLATFORM_POSITION, TABLE_TOP_Z
 
-TABLE_TOP_Z_M = .2
 PREFIX_CONTACT_LIMIT_N = .05
 STATE_FIELDS = ('q_normalized[18]', 'qd_div_3[18]', 'command_minus_q_div_.2[18]',
     'next_nominal_minus_nominal_div_.1[18]', 'grip_gain_minus_1[1]', f'phase_one_hot{list(PHASES)}',
@@ -140,9 +140,10 @@ class V1VecEnv(VecEnv):
                 noslip_iterations=self.solver_profile['noslip_iterations'],
                 noslip_tolerance=self.solver_profile['noslip_tolerance']),
             show_viewer=False)
-        self.scene.add_entity(gs.morphs.Plane())
-        self.table = self.scene.add_entity(gs.morphs.Box(size=(1.3, 1., .04), pos=(-.4, 0, .18), fixed=True),
-                                           material=gs.materials.Rigid(friction=.8))
+        # Same floor and imported platform as environment.Sandbox, where demonstrations and bases are recorded.
+        self.scene.add_entity(gs.morphs.Plane(pos=(0, 0, FLOOR_Z)))
+        self.table = self.scene.add_entity(gs.morphs.URDF(file=str(build_platform()[0]), pos=PLATFORM_POSITION,
+                                                          fixed=True), material=gs.materials.Rigid(friction=.8))
         self.robot = self.scene.add_entity(gs.morphs.URDF(file=str(model), fixed=True, pos=(0, 0, .2),
             merge_fixed_links=True, links_to_keep=['right_hand_link', 'tool0']),
             material=gs.materials.Rigid(friction=.8))
@@ -246,7 +247,7 @@ class V1VecEnv(VecEnv):
         all_load = torch.where(robot_pair, magnitude, 0.).sum(-1)
         region = self._region_force(pair, other, normal_force)
         position, quaternion = self.cube.get_pos(), self.cube.get_quat()
-        clearance = position[:, 2]-self.object_spec.vertical_extent(quaternion)-TABLE_TOP_Z_M
+        clearance = position[:, 2]-self.object_spec.vertical_extent(quaternion)-TABLE_TOP_Z
         # Every hand/object contact must carry this lane's sampled friction.
         from genesis.utils.misc import qd_to_torch
         state = self.solver.collider.collider_state

@@ -3,7 +3,7 @@
 This module has no Genesis import and can be checked on CPU before any scene is
 built. Dimensions are physical collider dimensions, never visual-only scaling.
 """
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 import hashlib
 from pathlib import Path
 from typing import Mapping
@@ -42,6 +42,12 @@ class ObjectSpec:
         if isinstance(value, Mapping):
             return cls(**value)
         raise TypeError('object_spec must be an ObjectSpec, shape name, or specification dict')
+
+    def scaled(self, factor):
+        """The same shape with every length multiplied by factor, rounded to 1 um."""
+        lengths = {name: round(getattr(self, name)*factor, 6)
+                   for name in ('side_m', 'radius_m', 'height_m', 'across_flats_m')}
+        return replace(self, size_m=tuple(round(v*factor, 6) for v in self.size_m), **lengths)
 
     @property
     def volume_m3(self):
@@ -125,7 +131,9 @@ class ObjectSpec:
         return {'path':str(path.resolve()),'sha256':digest,'format':'OBJ meters',
                 'vertices':12,'triangles':20,'convexify':True,'decimate':False}
 
-    def initial_position(self, xy=(-.60, -.1333), table_top_z=.2):
+    # Demonstration position. x was -.60 before the imported platform (tabletop x >= -.72);
+    # at -.50, +-15 cm placements keep every object at least 2 cm from the edge.
+    def initial_position(self, xy=(-.50, -.1333), table_top_z=.2):
         xy = np.asarray(xy, dtype=float)
         if xy.shape != (2,) or not np.isfinite(xy).all() or not np.isfinite(table_top_z):
             raise ValueError('Initial XY and tabletop height must be finite')

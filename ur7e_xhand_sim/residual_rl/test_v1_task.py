@@ -2,9 +2,11 @@ import unittest
 
 import numpy as np
 
+from .multiobject_geometry import ObjectSpec
 from .v1_task import (BASE_MOTION, V1Config, SamplerConfig, BreakMonitor, SlipTracker, LEVEL_RANGES_N,
     action_joints, base_draw_weights, break_soft_rate, episode_specs, force_to_level, hand_shape_joints,
-    limit_residual, minimum_grip_force, object_offsets, opposing_support, sample_episode, takeover_tick, wrap_yaw)
+    limit_residual, minimum_grip_force, object_offsets, opposing_support, sample_episode, scaled_object,
+    takeover_tick, wrap_yaw)
 
 
 class SamplerTest(unittest.TestCase):
@@ -154,6 +156,16 @@ class BaseDrawTest(unittest.TestCase):
             self.assertLessEqual(np.linalg.norm(own+rotation.T@shift), cfg.offset_max_m)
             self.assertIn(round(turn+2., 9), (-3., 3., -1., 1.))
         self.assertTrue(all(turn == 0. for _, turn in object_offsets(rng, pool, own, 0., None, rotation, 5, cfg)))
+
+
+class ScaledObjectTest(unittest.TestCase):
+    def test_scaled_object_keeps_shape_and_scales_every_length(self):
+        object_id, spec = scaled_object('cylinder', {'shape': 'cylinder', 'radius_m': .0225, 'height_m': .09}, .85)
+        self.assertEqual(object_id, 'cylinder_x085')
+        np.testing.assert_allclose(ObjectSpec.from_value(spec).bounds_size_m, [.03825, .03825, .0765])
+        object_id, spec = scaled_object('cuboid', 'cuboid', 1.15)
+        self.assertEqual((object_id, spec['shape']), ('cuboid_x115', 'cuboid'))
+        np.testing.assert_allclose(ObjectSpec.from_value(spec).bounds_size_m, [.05175, .069, .05175])
 
 
 if __name__ == '__main__':

@@ -12,14 +12,20 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
 .venv/bin/python -m pytest -q ur7e_xhand_sim/residual_rl
 ```
 
-## 1. 示范：每个物体 × 手型一条
+示范位置改到了 (−0.50, −0.133) m。先渲染一次，在 `outputs/platform_preview/contact_sheet.png` 里确认三个相机都拍得到物体：
 
-参数文件，如 `configs/v1/demos/cuboid_pinch.json`：
+```bash
+.venv/bin/python ur7e_xhand_sim/preview_environment.py --output outputs/platform_preview
+```
+
+## 1. 示范：每个物体（1×）× 手型一条
+
+参数文件命名为 `物体_手型.json`，如 `configs/v1/demos/cuboid_pinch.json`：
 
 ```json
 {
   "object_id": "cuboid",
-  "object_spec": {"shape": "cuboid"},
+  "object_spec": {"shape": "cuboid", "size_m": [0.045, 0.06, 0.045]},
   "hand_shape": "pinch",
   "palm_offset_m": [0.0, 0.0, 0.0],
   "palm_quaternion_wxyz": [1.0, 0.0, 0.0, 0.0],
@@ -29,11 +35,34 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
 }
 ```
 
-`hand_shape`：`pinch` / `tripod` / `wrap`。`palm_offset_m`：对准时手掌相对物体中心的偏移（世界系）。手部 12 个关节按 `build_assets.HAND_JOINTS` 的顺序。调参数直到退出码为 0；输出目录须不存在，每个组合只留一个成功目录。
+四种物体：
+
+| `object_id` | `object_spec` |
+|---|---|
+| `cuboid` | `{"shape": "cuboid", "size_m": [0.045, 0.06, 0.045]}` |
+| `hex_prism` | `{"shape": "hex_prism", "across_flats_m": 0.045, "height_m": 0.045}` |
+| `cylinder` | `{"shape": "cylinder", "radius_m": 0.0225, "height_m": 0.09}` |
+| `sphere` | `{"shape": "sphere", "radius_m": 0.0225}` |
+
+`hand_shape`：`pinch` / `tripod` / `wrap`。`palm_offset_m`：对准时手掌相对物体中心的偏移（世界系）。手部 12 个关节按 `build_assets.HAND_JOINTS` 的顺序。调参数直到退出码为 0；输出目录须不存在，每个组合只留一个成功目录。每种手型至少要有 2 种物体成功。
 
 ```bash
 .venv/bin/python ur7e_xhand_sim/v1_demo.py --spec configs/v1/demos/cuboid_pinch.json --output outputs/v1/demos/cuboid_pinch
 ```
+
+尺寸检查：全部示范成功后，每个参数文件在 0.85× 和 1.15× 上各跑一次，输出放在 `size_check/`，不当示范。
+
+```bash
+for f in configs/v1/demos/*.json; do b=$(basename $f .json); for s in 0.85 1.15; do
+  .venv/bin/python ur7e_xhand_sim/v1_demo.py --spec $f --scale $s --output outputs/v1/size_check/${b%_*}_x${s/./}_${b##*_}
+done; done
+```
+
+```bash
+grep -l 'before close' outputs/v1/size_check/*/score.json
+```
+
+列出的目录名（如 `cuboid_x115_wrap`）写进第 3 步配置的 `skip`；其他失败不用管。
 
 ## 2. 冒烟测试：用示范本身当 base
 
@@ -53,17 +82,29 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
 
 ## 3. 采集 base：BasePolicyV1 + Astra
 
-`configs/v1/collect.json`。`unseen` 每个没见过的物体 × 手型写一行，`demo` 用最接近的见过物体、同手型的示范：
+`configs/v1/collect.json`：
 
 ```json
 {
-  "demos": ["outputs/v1/demos/cuboid_pinch/demo.json"],
-  "unseen": [{"demo": "outputs/v1/demos/cuboid_pinch/demo.json", "object_id": "cube45",
-              "object_spec": {"shape": "cube", "side_m": 0.045}}],
-  "train_placements": 30, "test_placements": 10, "edge_placements": 3, "unseen_placements": 10,
+  "demos": ["outputs/v1/demos/cuboid_pinch/demo.json", "outputs/v1/demos/cuboid_tripod/demo.json"],
+  "scales": [0.85, 1.15],
+  "skip": [],
+  "unseen": [
+    {"object_id": "cube45", "near": "cuboid", "object_spec": {"shape": "cube", "side_m": 0.045}},
+    {"object_id": "cylinder35", "near": "cylinder", "object_spec": {"shape": "cylinder", "radius_m": 0.0175, "height_m": 0.07}},
+    {"object_id": "cuboid120", "near": "cuboid", "object_spec": {"shape": "cuboid", "size_m": [0.054, 0.072, 0.054]}}
+  ],
+  "train_placements": 10, "test_placements": 4, "edge_placements": 3, "unseen_placements": 10,
   "xy_range_m": 0.10, "edge_range_m": 0.15, "yaw_range_deg": 10, "seed": 1
 }
 ```
+
+- `demos`：列出所有成功示范。
+- `scales`：每个示范物体缩放后也采训练、测试位置，不采边缘位置。
+- `skip`：第 1 步尺寸检查没通过的组合。
+- `unseen`：`near` 填最接近的见过物体，该物体的每种手型都会测。
+
+物体离桌边不到 2 cm 时，规划会直接报错。
 
 先试跑 5 次（耗时见输出的 `wall_s`），再并行跑完。同一输出目录会跳过已完成的任务，加 `--retry-errors` 重跑出错的。
 

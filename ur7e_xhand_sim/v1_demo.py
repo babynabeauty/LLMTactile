@@ -8,6 +8,8 @@ successful run writes, next to the base-format commands (control.jsonl):
   reference.json  Astra success reference (7 keyframes x 3 views)
   demo.json       grasp parameters for BasePolicyV1
   bases.json      a one-base library (this demonstration) for smoke tests
+--scale runs the same spec on the object scaled by that factor (id suffix _x085 etc.):
+a size check before collection, not a demonstration.
 """
 from pathlib import Path
 import argparse
@@ -22,7 +24,8 @@ from scipy.spatial.transform import Rotation, Slerp
 from environment import Sandbox
 from build_assets import HAND_JOINTS, ARM_JOINTS
 from contact_guard import assess_contacts
-from residual_rl.v1_task import BASE_MOTION, HAND_SHAPES, hand_shape_joints, link_region, opposing_support
+from residual_rl.v1_task import (BASE_MOTION, HAND_SHAPES, hand_shape_joints, link_region, opposing_support,
+                                 scaled_object)
 
 VIEWS = ('scene_front', 'scene_left', 'wrist')
 CONTACT_N = .05
@@ -268,8 +271,12 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--spec', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
+    p.add_argument('--scale', type=float, default=1., help='object scale for a size check (not a demonstration)')
     args = p.parse_args()
     spec = json.loads(args.spec.read_text())
+    if args.scale != 1:
+        object_id, object_spec = scaled_object(spec['object_id'], spec['object_spec'], args.scale)
+        spec = dict(spec, object_id=object_id, object_spec=object_spec)
     validate_spec(spec)
     sim = Sandbox(output_dir=args.output.parent/f'runtime_{args.output.name}', render=False, cube_mass_kg=.05,
         cube_friction=.8, robot_friction=.8, object_spec=spec['object_spec'], physics_dt_s=1/300,

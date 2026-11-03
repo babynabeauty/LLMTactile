@@ -7,6 +7,8 @@ Astra fragility level, which is sampled with errors.
 from dataclasses import dataclass, asdict
 import numpy as np
 
+from .multiobject_geometry import ObjectSpec
+
 GRAVITY = 9.81
 LEVEL_BOUNDS_N = (2., 5., 12.)
 LEVEL_RANGES_N = {1: (.8, 2.), 2: (2., 5.), 3: (5., 12.), 4: (12., np.inf)}
@@ -44,6 +46,11 @@ def hand_shape_joints(shape):
 def action_joints(shapes):
     """Union of corrected joints over the hand shapes of one experiment, in joint order."""
     return tuple(sorted({j for shape in shapes for j in hand_shape_joints(shape)}))
+
+
+def scaled_object(object_id, object_spec, factor):
+    """A demonstrated object scaled by factor: id suffix _x085 for 0.85, every length scaled."""
+    return f'{object_id}_x{round(factor*100):03d}', asdict(ObjectSpec.from_value(object_spec).scaled(factor))
 
 
 @dataclass(frozen=True)

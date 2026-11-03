@@ -8,6 +8,8 @@ HERE = Path(__file__).resolve().parent
 TABLE_TOP_Z = .2
 FLOOR_Z = -.7
 PLATFORM_POSITION = (-.1, 0., FLOOR_Z)
+# Tabletop extent in world XY: the 1.2 x 0.8 m CAD body box, centered at (-.12, -.27).
+TABLETOP_XY_M = ((-.72, .48), (-.67, .13))
 
 
 def build_platform():

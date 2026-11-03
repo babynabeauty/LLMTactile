@@ -19,11 +19,16 @@ import urllib.request
 
 import numpy as np
 
+from platform_asset import TABLETOP_XY_M
+from residual_rl.multiobject_geometry import ObjectSpec
+from residual_rl.v1_task import scaled_object
+
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 DT = 1/60
 SOLVER = {'schema': 'genesis_rigid_solver_profile_v1', 'noslip_iterations': 5, 'noslip_tolerance': 1e-6}
 LIFT_PHASES = ('test_lift', 'lift', 'hold')
+TABLETOP_MARGIN_M = .02
 
 
 def sha(path):
@@ -38,14 +43,24 @@ def call(port, name, payload=None):
 
 
 def plan_jobs(config):
-    """Train and test placements within +-xy_range_m; edge test placements between that and +-edge_range_m."""
+    """Train and test placements within +-xy_range_m; edge test placements between that and +-edge_range_m.
+
+    Each demonstration also covers its object scaled by every factor in 'scales' (train and test, no
+    edge placements). Scaled and unseen objects reuse a demonstration; an unseen object is run with every
+    hand shape demonstrated on its 'near' object. 'skip' lists object_id_hand_shape scenes to leave out
+    (e.g. sizes that fail the v1_demo --scale check). Every object must stay TABLETOP_MARGIN_M inside the tabletop.
+    """
     rng = np.random.default_rng(config.get('seed', 1))
     radius, yaw = config.get('xy_range_m', .10), config.get('yaw_range_deg', 10.)
     edge_radius = config.get('edge_range_m', .15)
+    skip = set(config.get('skip', []))
     jobs = []
 
-    def add(demo_path, object_id, object_spec, split, count, unseen=False, edge=False):
-        demo = json.loads(Path(demo_path).read_text())
+    def add(demo_path, demo, object_id, object_spec, split, count, unseen=False, edge=False):
+        if f"{object_id}_{demo['hand_shape']}" in skip:
+            return
+        # Half diagonal of the footprint box bounds the footprint radius at any yaw.
+        reach = float(np.hypot(*ObjectSpec.from_value(object_spec).bounds_size_m[:2]))/2+TABLETOP_MARGIN_M
         for i in range(count):
             xy = rng.uniform(-radius, radius, 2)
             while edge and np.abs(xy).max() <= radius:
@@ -55,16 +70,28 @@ def plan_jobs(config):
                 placement['unseen_object'] = True
             if edge:
                 placement['edge'] = True
-            jobs.append(dict(run_id=f"{object_id}_{demo['hand_shape']}_{'edge' if edge else split}_{i:03d}",
-                demo=str(Path(demo_path).resolve()), object_id=object_id, object_spec=object_spec,
-                hand_shape=demo['hand_shape'], split=split, placement=placement))
-    for path in config['demos']:
-        demo = json.loads(Path(path).read_text())
-        add(path, demo['object_id'], demo['object_spec'], 'train', config['train_placements'])
-        add(path, demo['object_id'], demo['object_spec'], 'test', config['test_placements'])
-        add(path, demo['object_id'], demo['object_spec'], 'test', config.get('edge_placements', 0), edge=True)
+            run_id = f"{object_id}_{demo['hand_shape']}_{'edge' if edge else split}_{i:03d}"
+            center = np.asarray(demo['object_initial_position_m'][:2])+placement['offset_xy_m']
+            if any(not lo+reach <= c <= hi-reach for c, (lo, hi) in zip(center, TABLETOP_XY_M)):
+                raise ValueError(f'{run_id}: object at {center.round(3).tolist()} m is closer than '
+                                 f'{TABLETOP_MARGIN_M} m to the tabletop edge')
+            jobs.append(dict(run_id=run_id, demo=str(Path(demo_path).resolve()), object_id=object_id,
+                object_spec=object_spec, hand_shape=demo['hand_shape'], split=split, placement=placement))
+    demos = [(path, json.loads(Path(path).read_text())) for path in config['demos']]
+    for path, demo in demos:
+        add(path, demo, demo['object_id'], demo['object_spec'], 'train', config['train_placements'])
+        add(path, demo, demo['object_id'], demo['object_spec'], 'test', config['test_placements'])
+        add(path, demo, demo['object_id'], demo['object_spec'], 'test', config.get('edge_placements', 0), edge=True)
+        for scale in config.get('scales', []):
+            object_id, spec = scaled_object(demo['object_id'], demo['object_spec'], scale)
+            add(path, demo, object_id, spec, 'train', config['train_placements'])
+            add(path, demo, object_id, spec, 'test', config['test_placements'])
     for row in config.get('unseen', []):
-        add(row['demo'], row['object_id'], row['object_spec'], 'test', config['unseen_placements'], unseen=True)
+        near = [(path, demo) for path, demo in demos if demo['object_id'] == row['near']]
+        if not near:
+            raise ValueError(f"Unseen object {row['object_id']}: no demonstration of '{row['near']}'")
+        for path, demo in near:
+            add(path, demo, row['object_id'], row['object_spec'], 'test', config['unseen_placements'], unseen=True)
     return jobs
 
 
