@@ -141,7 +141,7 @@ class BreakAndSlipTest(unittest.TestCase):
         cfg, tracker = V1Config(), StableHold(1)
         for k in range(200):
             self.assertFalse(tracker.update(np.array([k/60]), np.array([.05]), np.zeros((1, 3)),
-                turn_z(k*.1)[None], np.array([True]), np.array([True]), cfg)[0])   # 6 deg/s keeps turning
+                turn_z(k*.2)[None], np.array([True]), np.array([True]), cfg)[0])   # 12 deg/s keeps turning
         self.assertLess(tracker.longest[0], 1)
 
     def test_score_lift_decides_like_the_environment(self):

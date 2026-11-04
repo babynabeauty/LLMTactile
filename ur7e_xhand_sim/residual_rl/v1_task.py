@@ -70,11 +70,12 @@ class V1Config:
     lost_m: float = .03
     # Success ends the episode: once at least lift_clearance_m off the table, the object keeps
     # opposing support and stays within stable_shift_m / stable_rotation_deg of one palm-frame
-    # pose for stable_hold_s.
+    # pose for stable_hold_s. Rotation is looser than shift: a two-finger pinch creeps a few
+    # degrees per second about the finger axis while the object center stays put.
     lift_clearance_m: float = .02
     stable_hold_s: float = 2.
     stable_shift_m: float = .002
-    stable_rotation_deg: float = 5.
+    stable_rotation_deg: float = 10.
     # Preserve the time integral of normalized squared residual slew speed.
     residual_change_weight: float = .005*15/V1_RATES.action_hz
     success_bonus: float = 25.
