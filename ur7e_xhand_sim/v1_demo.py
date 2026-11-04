@@ -3,8 +3,11 @@
 The spec JSON fixes the grasp: palm offset from the object center, palm
 orientation, open and closed hand postures and grip gain. Close, test_lift and
 lift use BasePolicyV1's timing (straight lines, one target per 60 Hz tick, no
-tactile feedback), so a successful demonstration predicts the bases. A
-successful run writes, next to the base-format commands (control.jsonl):
+tactile feedback), so a successful demonstration predicts the bases. Settle,
+approach, align and hold keep each target for 4 ticks (15 Hz): bases plan their
+own approach and hold a constant target. Unlike BasePolicyV1, every target
+carries an integral IK correction for arm sag. A successful run writes, next to
+the base-format commands (control.jsonl):
   reference.json  Astra success reference (7 keyframes x 3 views)
   demo.json       grasp parameters for BasePolicyV1
   bases.json      a one-base library (this demonstration) for smoke tests
@@ -71,7 +74,8 @@ def validate_spec(spec):
 
 
 class SpecDemo:
-    """300 Hz physics, 60 Hz records, 15 Hz targets; the object is never moved by the script."""
+    """300 Hz physics, 60 Hz records, targets at 60 Hz in close/test_lift/lift and 15 Hz otherwise;
+    the object is never moved by the script."""
     def __init__(self, sim, output, spec):
         validate_spec(spec)
         self.sim, self.spec = sim, dict(spec)
@@ -89,7 +93,9 @@ class SpecDemo:
         self.set_gain(1.)
         write(self.out/'manifest.json', {'schema': 'ur7e_xhand_v1_demo', 'spec': self.spec,
             'object_spec': sim.object_spec.protocol(), 'solver_profile': sim.solver_profile,
-            'robot_joint_order': sim.names, 'control_dt_s': 1/60, 'physics_dt_s': 1/300, 'target_update_hz': 15,
+            'robot_joint_order': sim.names, 'control_dt_s': 1/60, 'physics_dt_s': 1/300,
+            'target_update_hz': {'settle': 15, 'approach': 15, 'align': 15, 'close': 60, 'test_lift': 60,
+                                 'lift': 60, 'hold': 15},
             'provenance': 'Scripted grasp from a fixed spec with privileged object center; no Astra inference.',
             'closure': 'fixed interpolation from open to closed hand, no tactile feedback',
             'pd_scaling': 'hand-shape finger kp multiplied by grip gain, kv by sqrt(gain); effort limits unchanged',
