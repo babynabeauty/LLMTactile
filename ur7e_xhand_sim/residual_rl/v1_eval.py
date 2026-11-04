@@ -13,9 +13,11 @@ import numpy as np
 from .v1_bases import load_experiment, sha256
 from .control_protocol import current_control_protocol, require_checkpoint_control_compatibility
 from .tactile_provenance import require_checkpoint_tactile_compatibility
-from .v1_task import episode_specs
+from .v1_task import SamplerConfig, episode_specs, minimum_grip_force
 
-DEFAULT_MATERIALS = [[m, u] for m in (.08, .12, .18) for u in (.3, .45, .7)]
+# Held-out grid; 0.3 kg at friction 0.3 needs more grip than the hand can give and is left out.
+DEFAULT_MATERIALS = [[m, u] for m in (.12, .2, .3) for u in (.3, .45, .7)
+                     if minimum_grip_force(m, u) <= SamplerConfig().max_grip_force_N]
 FAILURES = ('break', 'dropped', 'collision', 'not_lifted', 'no_opposing_support', 'unstable')
 
 

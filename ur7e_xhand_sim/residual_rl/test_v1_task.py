@@ -25,6 +25,7 @@ class SamplerTest(unittest.TestCase):
             self.assertTrue(cfg.mass_range_kg[0] <= e['mass_kg'] <= cfg.mass_range_kg[1])
             self.assertTrue(cfg.friction_range[0] <= e['friction'] <= cfg.friction_range[1])
             self.assertGreater(e['f_break_N'], cfg.feasibility_margin*e['f_min_N']-1e-9)
+            self.assertLessEqual(e['f_min_N'], cfg.max_grip_force_N+1e-9)
             self.assertEqual(force_to_level(e['f_break_N']), e['level'])
             if e['narrow_window']:
                 self.assertTrue(cfg.narrow_ratio[0]-1e-9 <= e['window_ratio'] <= cfg.narrow_ratio[1]+1e-9)
@@ -44,6 +45,14 @@ class SamplerTest(unittest.TestCase):
         e = sample_episode(rng, SamplerConfig(levels=(4,)))
         self.assertEqual(e['level'], 4)
         self.assertTrue(np.isinf(e['f_break_N']))
+
+    def test_t1_materials_reach_the_hold_limit_but_not_beyond(self):
+        rng = np.random.default_rng(4)
+        cfg = SamplerConfig(levels=(4,))
+        f_min = np.array([sample_episode(rng, cfg)['f_min_N'] for _ in range(4000)])
+        self.assertLessEqual(f_min.max(), cfg.max_grip_force_N)
+        # Some T1 episodes need more grip than the base gives (about 2-3 N per finger).
+        self.assertGreater(np.mean(f_min > 2.5), .1)
 
     def test_evaluation_grid_skips_infeasible_levels(self):
         heavy_slippery = [(.2, .2)]   # F_min = 4.9 N, so levels 1 and 2 are impossible

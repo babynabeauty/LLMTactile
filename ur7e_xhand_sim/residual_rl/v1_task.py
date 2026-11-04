@@ -100,8 +100,11 @@ class V1Config:
 @dataclass(frozen=True)
 class SamplerConfig:
     levels: tuple = (1, 2, 3, 4)
-    mass_range_kg: tuple = (.05, .2)
+    mass_range_kg: tuple = (.05, .3)
     friction_range: tuple = (.2, .8)
+    # Above this F_min the hand drops the object even at 2.5x finger stiffness (level-4 sweep,
+    # 2026-11-04), so such materials are never drawn.
+    max_grip_force_N: float = 4.
     narrow_fraction: float = .5
     narrow_ratio: tuple = (1.2, 2.)
     feasibility_margin: float = 1.2
@@ -127,6 +130,8 @@ class SamplerConfig:
                 raise ValueError(f'{name} must be a positive ordered pair')
         if self.narrow_ratio[0] < self.feasibility_margin:
             raise ValueError('Narrow windows must remain feasible')
+        if not (np.isfinite(self.max_grip_force_N) and self.max_grip_force_N > 0):
+            raise ValueError('max_grip_force_N must be finite and positive')
         for name in ('narrow_fraction', 'astra_error_rate', 'astra_lower_share', 'r_max_fraction', 's_offset_fraction'):
             if not 0 <= getattr(self, name) <= 1:
                 raise ValueError(f'{name} must lie in [0, 1]')
@@ -154,7 +159,10 @@ def astra_level(rng, level, cfg):
 
 
 def sample_episode(rng, cfg=SamplerConfig()):
-    """Level first, then a feasible material, so rejection never thins level 1."""
+    """Level first, then a feasible material, so rejection never thins level 1.
+
+    Feasible: the hand can hold it (F_min <= max_grip_force_N) and F_break exceeds F_min by the margin.
+    """
     level = int(rng.choice(cfg.levels))
     lo, hi = LEVEL_RANGES_N[level]
     m_lo, m_hi = cfg.mass_range_kg
@@ -162,19 +170,17 @@ def sample_episode(rng, cfg=SamplerConfig()):
     f_break = np.inf if level == 4 else float(np.exp(rng.uniform(np.log(lo), np.log(hi))))
     for _ in range(cfg.max_tries):
         mu = rng.uniform(*cfg.friction_range)
-        if level == 4:
-            mass = rng.uniform(m_lo, m_hi)
-            break
         if narrow:
-            # Set F_break/F_min directly. Near the top of level 3 even 200 g
-            # cannot need that much force, so F_break is redrawn as well.
+            # Set F_break/F_min directly. Near the top of level 3 no holdable material
+            # needs that much force, so F_break is redrawn as well.
             mass = 2*mu*(f_break/rng.uniform(*cfg.narrow_ratio))/GRAVITY
-            if m_lo <= mass <= m_hi:
+            if m_lo <= mass <= m_hi and minimum_grip_force(mass, mu) <= cfg.max_grip_force_N:
                 break
             f_break = float(np.exp(rng.uniform(np.log(lo), np.log(hi))))
         else:
             mass = rng.uniform(m_lo, m_hi)
-            if f_break > cfg.feasibility_margin*minimum_grip_force(mass, mu):
+            f_min = minimum_grip_force(mass, mu)
+            if f_min <= cfg.max_grip_force_N and f_break > cfg.feasibility_margin*f_min:
                 break
     else:
         raise RuntimeError(f'No feasible material for fragility level {level}')
