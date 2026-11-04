@@ -172,7 +172,7 @@ done; done
 缺省为零。`palm_offset_m` 指的是 **close 开始前的预抓取位置**。
 BasePolicyV1 同步读取此位移；小模型仍从 close 开始接管手指残差。
 
-**合拢改为先下降、再原地合拢（2026-11-03）：** 原参数在 close 时让手掌下降 0.05 m，手指碰到物体后手臂还在下压，第 1–3 档全部在合拢时捏碎。重新生成示范前，把 `configs/v1/demos/cuboid_*.json` 里 `palm_offset_m` 的第三个值减 0.05，`close_translation_m` 设为 `[0, 0, 0]`，最终抓取位置不变。如果预抓取手型下降时碰到物体或桌面，就把 `open_hand_rad` 调得更张开。先跑一个示范，确认合拢时的峰值力接近保持阶段的 4–8 N，再重采 base、重新标注。
+**合拢改为先下降、再原地合拢（2026-11-03）：** 原参数在 close 时让手掌下降 0.05 m，手指碰到物体后手臂还在下压，第 1–3 档全部在合拢时捏碎。重新生成示范前，把 `configs/v1/demos/cuboid_*.json` 里 `palm_offset_m` 的第三个值减 0.05，`close_translation_m` 设为 `[0, 0, 0]`，最终抓取位置不变。如果预抓取手型下降时碰到物体或桌面，就把 `open_hand_rad` 调得更张开。先跑一个示范并按第 2 步做零残差回放，成功后再重采 base、重新标注。合拢时手指刚碰到物体会有 20–60 N 的短暂冲击，离桌后回落到 5–11 N；这一下留给小模型，不调慢 base 的合拢。
 
 ```bash
 .venv/bin/python ur7e_xhand_sim/v1_demo.py \
