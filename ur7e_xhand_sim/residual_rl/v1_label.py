@@ -51,7 +51,8 @@ def record_check(run, demo):
     if early > CONTACT_N:
         return dict(usable=False, reason=f'contact before close ({early:.3f} N)')
     o = rows[k]['observation']
-    rotation = quaternion_matrix(o['wrist_quaternion_wxyz'])
+    # Commanded palm frame at the actual wrist position, the frame v1_demo exports object_center_in_palm_m in.
+    rotation = quaternion_matrix(demo['palm_quaternion_wxyz'])
     center = rotation.T@(np.asarray(evals[k]['object_position_m'])-np.asarray(o['wrist_position_m']))
     offset = center-np.asarray(demo['object_center_in_palm_m'])
     yaw_error = abs(wrap_yaw(run['placement']['yaw_deg'], YAW_PERIOD_DEG.get(run['object_spec']['shape'])))

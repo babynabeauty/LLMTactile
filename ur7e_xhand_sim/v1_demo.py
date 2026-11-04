@@ -5,8 +5,9 @@ orientation, open and closed hand postures and grip gain. Close, test_lift and
 lift use BasePolicyV1's timing (straight lines, one target per 60 Hz tick, no
 tactile feedback), so a successful demonstration predicts the bases. Settle,
 approach, align and hold keep each target for 4 ticks (15 Hz): bases plan their
-own approach and hold a constant target. Unlike BasePolicyV1, every target
-carries an integral IK correction for arm sag. A successful run writes, next to
+own approach and hold a constant target. Every target carries an integral IK
+correction for arm sag; BasePolicyV1 applies the same gain while it settles at
+the pregrasp and keeps that correction from close on. A successful run writes, next to
 the base-format commands (control.jsonl):
   reference.json  Astra success reference (7 keyframes x 3 views)
   demo.json       grasp parameters for BasePolicyV1
@@ -262,8 +263,11 @@ class SpecDemo:
     def export(self, score):
         c, stages = self.spec, {row['name']: row for row in self.stages}
         # Before closing: BasePolicyV1 places the open hand here and v1_label compares close start with it.
+        # Commanded palm orientation at the actual wrist position: BasePolicyV1 commands that orientation
+        # and puts the wrist at center - R @ center_in_palm, which reproduces this wrist position.
         palm = np.asarray(stages['aligned']['palm_pose_world'])
-        center_in_palm = palm[:3, :3].T@(np.asarray(stages['aligned']['object_position_m'])-palm[:3, 3])
+        rotation = Rotation.from_quat(np.asarray(c['palm_quaternion_wxyz'], float)[[1, 2, 3, 0]]).as_matrix()
+        center_in_palm = rotation.T@(np.asarray(stages['aligned']['object_position_m'])-palm[:3, 3])
         files = ['manifest.json', 'stages.json', 'control.jsonl', 'evaluation.jsonl', 'score.json']
         files += [f"{row['image_dir']}/{view}.jpg" for row in self.stages for view in VIEWS]
         write(self.out/'reference.json', {'schema': 'ur7e_xhand_genesis_success_reference_v1',

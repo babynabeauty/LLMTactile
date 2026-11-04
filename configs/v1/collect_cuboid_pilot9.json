@@ -1,8 +1,8 @@
 {
   "demos": [
-    "outputs/v1/demos_v2/cuboid_pinch/demo.json",
-    "outputs/v1/demos_v2/cuboid_tripod/demo.json",
-    "outputs/v1/demos_v2/cuboid_wrap/demo.json"
+    "outputs/v1/demos_v3/cuboid_pinch/demo.json",
+    "outputs/v1/demos_v3/cuboid_tripod/demo.json",
+    "outputs/v1/demos_v3/cuboid_wrap/demo.json"
   ],
   "scales": [],
   "skip": [],

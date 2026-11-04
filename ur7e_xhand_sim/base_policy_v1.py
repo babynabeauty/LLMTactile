@@ -6,6 +6,10 @@ closed hand, grasp center and grip gain. close interpolates straight to the
 demonstrated closed hand. There is no rule controller, no Astra force choice
 and no support gate before lifting. The object starts at an explicit
 placement. Only robot targets are commanded; the object is never moved.
+Every move starts at the last commanded wrist pose, so the arm target stays
+continuous across skills. After align the open hand holds the pregrasp while
+an integral correction removes the arm sag, as v1_demo does before closing;
+the correction stays fixed from close on.
 """
 from pathlib import Path
 import json
@@ -55,6 +59,9 @@ grasp looks poor; an independent evaluation scores the result. Return done with 
 hold, or abort with skill=none only after an executor error. Do not repeat skills invalid in the
 current phase. Tactile values are uncalibrated simulated estimates, not hardware units.
 '''
+# Pregrasp settle: 1.5 s at 60 Hz; v1_demo's sag-correction gain per 60 Hz tick.
+PREGRASP_SETTLE_TICKS = 90
+SAG_GAIN_PER_TICK = .03
 
 
 class SkillAct(ProjectSkillAct):
@@ -122,6 +129,10 @@ class BasePolicyV1:
         kv[gain_joints] *= np.sqrt(self.grip_gain)
         sim.robot.set_dofs_kp(kp, sim.indices)
         sim.robot.set_dofs_kv(kv, sim.indices)
+        # Replanning from the sagging actual pose would drop the PD offset that holds the arm against
+        # gravity, and the wrist would sink at every skill change.
+        self.wrist_target = (sim.array(sim.wrist.get_pos()).reshape(3), sim.array(sim.wrist.get_quat()).reshape(4))
+        self.correction = np.zeros(3)
         position = sim._initial_object_position()
         position[:2] = np.asarray(demo['object_initial_position_m'][:2], float)+np.asarray(
             placement.get('offset_xy_m', [0., 0.]), float)
@@ -141,6 +152,9 @@ class BasePolicyV1:
             camera_views=sim.camera_views, control_dt_s=sim.control_dt_s,
             rule_controller=None, lift_support_gate=None, astra_force_choice=None,
             closure='fixed interpolation from the open to the demonstrated closed hand',
+            motion='straight lines from the last commanded wrist pose at BASE_MOTION rates',
+            arm_sag_correction=f'integral wrist-position correction, {SAG_GAIN_PER_TICK} per tick over a '
+                               f'{PREGRASP_SETTLE_TICKS}-tick pregrasp settle, fixed afterwards',
             success='object bottom > table + .05 m for the final 3 simulated seconds, no execution fault'))
         self.nominal = sim.target.copy()
         self.capture()
@@ -252,10 +266,21 @@ class BasePolicyV1:
             write(self.out/'contact_guard_stop.json', dict(step=s.steps, phase=phase, **guard))
             raise ValueError(guard['reason'])
 
-    def _move_targets(self, position, hand):
-        """Yield nominal targets without stepping physics (at most one tick ahead)."""
+    def _ik(self, position, quat):
+        """Arm joint target for a wrist pose, shifted by the pregrasp sag correction."""
         s = self.sim
-        start, q0 = s.array(s.wrist.get_pos()).reshape(3), s.array(s.wrist.get_quat()).reshape(4)
+        q, err = s.robot.inverse_kinematics(s.wrist, pos=position+self.correction, quat=quat,
+            dofs_idx_local=s.arm_indices, return_error=True, max_solver_iters=80, seed=42)
+        err = s.array(err).reshape(-1)
+        if np.linalg.norm(err[:3]) > .004 or np.linalg.norm(err[3:]) > .03:
+            raise ValueError('IK failed along skill path')
+        return s.array(q).reshape(-1)[s.indices]
+
+    def _move_targets(self, position, hand):
+        """Yield nominal targets without stepping physics (at most one tick ahead), starting at the
+        last commanded wrist pose."""
+        s = self.sim
+        start, q0 = self.wrist_target
         hand0 = (self.nominal if self.online else s.target)[6:].copy()
         rotations = Rotation.from_quat(np.stack([q0[[1, 2, 3, 0]], self.grasp_quat[[1, 2, 3, 0]]]))
         turn, slerp = (rotations[0].inv()*rotations[1]).magnitude(), Slerp([0, 1], rotations)
@@ -264,15 +289,10 @@ class BasePolicyV1:
                     int(np.ceil(np.max(np.abs(hand-hand0))/m['hand_rad_per_tick'])), int(np.ceil(turn/m['turn_rad_per_tick'])))
         for i in range(1, count+1):
             f = i/count
-            q, err = s.robot.inverse_kinematics(s.wrist, pos=start+(position-start)*f,
-                quat=slerp(f).as_quat()[[3, 0, 1, 2]], dofs_idx_local=s.arm_indices, return_error=True,
-                max_solver_iters=80, seed=42)
-            err = s.array(err).reshape(-1)
-            if np.linalg.norm(err[:3]) > .004 or np.linalg.norm(err[3:]) > .03:
-                raise ValueError('IK failed along skill path')
-            target = s.array(q).reshape(-1)[s.indices]
+            target = self._ik(start+(position-start)*f, slerp(f).as_quat()[[3, 0, 1, 2]])
             target[6:] = hand0+(hand-hand0)*f
             yield target
+        self.wrist_target = (np.array(position, float), self.grasp_quat.copy())
         for _ in range(m['settle_ticks']):
             yield target.copy()
 
@@ -295,6 +315,21 @@ class BasePolicyV1:
                     if future is None:
                         break
                     target = future
+        finally:
+            s.render_enabled = not self.online
+
+    def _settle(self, position):
+        """Hold the open hand at the pregrasp while v1_demo's integral correction removes the arm sag."""
+        s = self.sim
+        s.render_enabled = False
+        try:
+            for _ in range(PREGRASP_SETTLE_TICKS):
+                error = position-s.array(s.wrist.get_pos()).reshape(3)
+                self.correction = np.clip(self.correction+SAG_GAIN_PER_TICK*error, -.025, .025)
+                target = self._ik(position, self.grasp_quat)
+                target[6:] = self.open
+                self._tick(target, 'align')
+                yield None
         finally:
             s.render_enabled = not self.online
 
@@ -384,19 +419,20 @@ class BasePolicyV1:
                 if action.skill == 'approach':
                     # Move horizontally above the workpiece before descending.
                     high = position.copy()
-                    high[2] = max(self.sim.values(self.sim.wrist.get_pos())[2], position[2]+.10)
+                    high[2] = max(self.wrist_target[0][2], position[2]+.10)
                     start_hand = (self.nominal if self.online else self.sim.target)[6:].copy()
                     yield from self._move_iter(high, start_hand+.4*(self.open-start_hand), 'approach')
                     yield from self._move_iter(position+np.array([0, 0, .10]), start_hand+.75*(self.open-start_hand), 'approach')
                     self.phase = 'approached'
                 elif action.skill == 'align':
                     yield from self._move_iter(position, self.open, 'align')
+                    yield from self._settle(position)
                     self.phase = 'aligned'
                 elif action.skill == 'close':
                     yield from self._move_iter(position+self.close_translation, self.closed, 'close')
                     self.phase = 'contact'
                 elif action.skill in ('test_lift', 'lift'):
-                    pos = self.sim.array(self.sim.wrist.get_pos()).reshape(3)
+                    pos = self.wrist_target[0].copy()
                     pos[2] += .02 if action.skill == 'test_lift' else .08
                     yield from self._move_iter(pos, self.closed, action.skill)
                     self.phase = 'test_lifted' if action.skill == 'test_lift' else 'lifted'
