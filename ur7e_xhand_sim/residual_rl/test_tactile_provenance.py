@@ -78,3 +78,12 @@ def test_resume_rejects_legacy_or_changed_sensor_but_allows_current(tmp_path):
     manifest.write_text(json.dumps({'tactile_model':changed}))
     with pytest.raises(ValueError,match='Checkpoint tactile semantics'):
         require_checkpoint_tactile_compatibility(path)
+
+
+def test_periodic_checkpoint_uses_the_run_manifest(tmp_path):
+    (tmp_path/'checkpoints').mkdir()
+    path=tmp_path/'checkpoints'/'ppo_000262152.zip';path.write_bytes(b'CPU fixture, not a model')
+    with pytest.raises(ValueError,match='Checkpoint tactile semantics'):
+        require_checkpoint_tactile_compatibility(path)
+    (tmp_path/'manifest.json').write_text(json.dumps({'tactile_model':current_tactile_model()}))
+    require_checkpoint_tactile_compatibility(path)

@@ -114,7 +114,11 @@ def require_checkpoint_tactile_compatibility(checkpoint):
     """Fail before training if resume would silently change sensor semantics."""
     if checkpoint is None:
         return
-    manifest_path=Path(checkpoint).expanduser().resolve().parent/'manifest.json'
+    run=Path(checkpoint).expanduser().resolve().parent
+    # Periodic checkpoints sit in the run's checkpoints/ folder, one level below its manifest.
+    if run.name=='checkpoints':
+        run=run.parent
+    manifest_path=run/'manifest.json'
     saved=json.loads(manifest_path.read_text()) if manifest_path.is_file() else {}
     if not tactile_models_match(saved.get('tactile_model'),current_tactile_model()):
         raise ValueError('Checkpoint tactile semantics are missing or differ from the current sensor; compatibility must be evaluated before resuming training')

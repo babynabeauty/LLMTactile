@@ -212,6 +212,8 @@ def policy_kwargs(
             "normal_directions_link": normal_directions_link,
         },
         "net_arch": {"pi": [64, 64], "vf": [64, 64]},
+        # The critic gets its own encoder: a shared one let the value loss move the policy (KL 0.5-1.1).
+        "share_features_extractor": False,
         "activation_fn": nn.SiLU,
         "normalize_images": False,
         "log_std_init": math.log(action_std_init),
