@@ -49,6 +49,18 @@ def cpu(x):
     return x.detach().cpu().numpy() if isinstance(x, torch.Tensor) else np.asarray(x)
 
 
+def diagnostic_armature(value):
+    """Optional finger rotor inertia in kg m²; None keeps the loaded model."""
+    if value is None:
+        return None
+    if isinstance(value, (bool, np.bool_)) or not np.isscalar(value):
+        raise ValueError('finger_armature must be None or a finite nonnegative scalar in kg m²')
+    value = float(value)
+    if not np.isfinite(value) or value < 0:
+        raise ValueError('finger_armature must be None or a finite nonnegative scalar in kg m²')
+    return value
+
+
 def quaternion_multiply(a, b):
     w1, x1, y1, z1 = a
     w2, x2, y2, z2 = b
@@ -67,7 +79,8 @@ def quaternion_matrix(q):
 class V1VecEnv(VecEnv):
     def __init__(self, object_spec, bases, *, n_envs=12, seed=0, output_dir=None, object_id='object',
                  hand_shape='pinch', action_joints=None, config=None, sampler=None, use_level=True,
-                 joint_friction_Nm=(0., 0.), tactile_noise_N=0., fixed_gain=None, augment=False):
+                 joint_friction_Nm=(0., 0.), tactile_noise_N=0., fixed_gain=None, augment=False,
+                 finger_armature=None):
         self.render_mode = None
         self.rates = V1_RATES
         self.config = config or V1Config()
@@ -82,6 +95,7 @@ class V1VecEnv(VecEnv):
         # None follows each base's recorded gain; a number replaces it after
         # takeover (fixed-gain baselines, residual left at zero).
         self.fixed_gain = None if fixed_gain is None else float(fixed_gain)
+        self.finger_armature = diagnostic_armature(finger_armature)
         self.rng = np.random.default_rng(seed)
         self.seed_value = seed
         self.output_dir = Path(output_dir or ROOT/'outputs/v1_runtime')
@@ -167,6 +181,9 @@ class V1VecEnv(VecEnv):
         self.scene.build(n_envs=self.num_envs)
         self.names = ARM_JOINTS+HAND_JOINTS
         self.indices = [self.robot.get_joint(n).dofs_idx_local[0] for n in self.names]
+        # Diagnostic override is applied before any prefix physics, to all twelve
+        # finger joints even in a pinch-only experiment. Arm joints stay loaded.
+        self._configure_finger_armature()
         self.finger_links = [self.robot.get_link(l['link_name']).idx for l in self.layouts]
         self.palm = self.robot.get_link('right_hand_link')
         self.solver = self.scene.rigid_solver
@@ -190,6 +207,22 @@ class V1VecEnv(VecEnv):
         self.gains = np.full(self.num_envs, np.nan, np.float32)
         self.mass = np.full(self.num_envs, .1)
         self.mu = np.full(self.num_envs, .8)
+
+    def _configure_finger_armature(self):
+        before = cpu(self.robot.get_dofs_armature(self.indices)).copy().reshape(self.num_envs, 18)
+        if self.finger_armature is not None:
+            self.robot.set_dofs_armature(
+                np.full((self.num_envs, 12), self.finger_armature, np.float32), self.indices[6:])
+        after = cpu(self.robot.get_dofs_armature(self.indices)).copy().reshape(self.num_envs, 18)
+        np.testing.assert_array_equal(after[:, :6], before[:, :6],
+                                      err_msg='Diagnostic override changed arm armatures')
+        if self.finger_armature is None:
+            np.testing.assert_array_equal(after, before)
+        else:
+            np.testing.assert_allclose(after[:, 6:], self.finger_armature, rtol=1e-6, atol=0,
+                                       err_msg='Finger armature readback differs from override')
+        self.armature_readback = dict(joint_names=list(self.names), dofs_idx_local=list(self.indices),
+            before_kg_m2=before.tolist(), after_kg_m2=after.tolist())
 
     def _configure_rendering(self):
         """Optional observation-only camera setup before the scene is built."""
@@ -661,6 +694,7 @@ class V1VecEnv(VecEnv):
             config=asdict(self.config), sampler=asdict(self.sampler), use_level=self.use_level,
             joint_friction_Nm=list(self.joint_friction_Nm), tactile_noise_N=self.tactile_noise_N,
             fixed_gain=self.fixed_gain, tactile_model=current_tactile_model(),
+            finger_armature_override_kg_m2=self.finger_armature, armature_readback=self.armature_readback,
             solver_profile=self.solver_profile, solver_readback=self.solver_readback,
             actor_state_fields=list(STATE_FIELDS), state_dim=self.state_dim, privileged_actor_input=False,
             hand_shape=self.hand_shape, hand_shape_fingers=list(HAND_SHAPES[self.hand_shape]),

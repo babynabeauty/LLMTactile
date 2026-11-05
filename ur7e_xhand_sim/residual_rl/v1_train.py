@@ -200,7 +200,7 @@ def stage_of(experiment, name):
 
 
 def build_environment(experiment, stage, output, *, seed, method, lanes=None, fixed_gain=None,
-                      split='train', labels=TRAINING_LABELS):
+                      split='train', labels=TRAINING_LABELS, finger_armature=None):
     from .v1_env import V1VecEnv, V1ComposedVecEnv
     config = V1Config(**experiment.get('config', {}))
     sampler = SamplerConfig(**{**experiment.get('sampler', {}), 'levels': tuple(stage['levels'])})
@@ -216,7 +216,7 @@ def build_environment(experiment, stage, output, *, seed, method, lanes=None, fi
                 use_level=METHODS[method]['use_level'],
                 joint_friction_Nm=experiment.get('joint_friction_Nm', [0., 0.]),
                 tactile_noise_N=experiment.get('tactile_noise_N', 0.), fixed_gain=fixed_gain,
-                augment=split == 'train'))
+                augment=split == 'train', finger_armature=finger_armature))
         return V1ComposedVecEnv(envs)
     except BaseException:
         if envs:
