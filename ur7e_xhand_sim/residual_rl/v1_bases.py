@@ -129,11 +129,11 @@ def experiment_action_joints(experiment, libraries):
 
 
 # Exploration noise in action units (1 = .15 rad), drawn once per rollout: thumb flexion
-# .3 (.045 rad), other finger flexion .1 (.015 rad), and other joints .03 (.0045 rad).
+# .2 (.03 rad), other finger flexion .1 (.015 rad), and other joints .03 (.0045 rad).
 # Groups match v1_label.candidates; scalar .03 exploration rarely reaches useful thumb offsets.
 TRAINING_DEFAULTS = dict(n_steps=512, batch_size=1024, n_epochs=5, learning_rate=3e-4, gamma=1., gae_lambda=.95**.25,
     use_sde=True, normalize_sde_latent=True, sde_sample_freq=-1,
-    action_std_init=dict(thumb_flexion=.3, finger_flexion=.1, other=.03), adam_eps=1e-5,
+    action_std_init=dict(thumb_flexion=.2, finger_flexion=.1, other=.03), adam_eps=1e-5,
     seeds=[1, 2, 3], methods=['tactile', 'no_tactile', 'tactile_no_level'], checkpoint_every=262144)
 STAGES = [dict(name='stage1', levels=[4], requested_timesteps=2621440),
           dict(name='stage2', levels=[1, 2, 3, 4], requested_timesteps=2621440, resume_previous=True)]

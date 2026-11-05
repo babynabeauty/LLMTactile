@@ -39,13 +39,13 @@ class ExplorationStdTest(unittest.TestCase):
 
     def test_all_twelve_joints_and_pinch_only(self):
         groups = TRAINING_DEFAULTS['action_std_init']
-        expected = (.03, .3, .3, .03, .1, .1, .1, .1, .1, .1, .1, .1)
+        expected = (.03, .2, .2, .03, .1, .1, .1, .1, .1, .1, .1, .1)
         self.assertEqual(action_exploration_stds(action_joints(['wrap']), groups), expected)
         self.assertEqual(action_exploration_stds(action_joints(['pinch']), groups), expected[:6])
 
     def test_joint_ids_not_dimension_positions(self):
         self.assertEqual(action_exploration_stds((11, 2, 0, 4, 3, 1),
-                         TRAINING_DEFAULTS['action_std_init']), (.1, .3, .03, .1, .03, .3))
+                         TRAINING_DEFAULTS['action_std_init']), (.1, .2, .03, .1, .03, .2))
 
     def test_scalar_requires_new_experiment_json(self):
         with self.assertRaisesRegex(ValueError, 'regenerate the experiment JSON'):
@@ -114,7 +114,7 @@ class ExplorationStdTest(unittest.TestCase):
             dry_run(experiment)
         report = json.loads(output.getvalue())
         self.assertEqual(report['action_std_init_by_joint'],
-                         {'0': .03, '1': .3, '2': .3, '3': .03, '4': .1, '5': .1})
+                         {'0': .03, '1': .2, '2': .2, '3': .03, '4': .1, '5': .1})
 
 
 if __name__ == '__main__':
