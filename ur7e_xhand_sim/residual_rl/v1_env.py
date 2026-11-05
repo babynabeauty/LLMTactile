@@ -29,6 +29,7 @@ from .control_protocol import (V1_RATES, HISTORY_SAMPLES, current_control_protoc
 from .multiobject_geometry import ObjectSpec
 from .solver_profile import normalize_solver_profile, read_solver_readback, validate_solver_readback
 from .tactile_provenance import current_tactile_model
+from .v1_metrics import PostContactResidual
 from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, StableHold, REGIONS, FINGERS, PHASES,
     HAND_SHAPES, YAW_PERIOD_DEG, base_draw_weights, hand_shape_joints, link_region, limit_residual,
     break_soft_rate, object_offsets, opposing_support, sample_episode, wrap_yaw)
@@ -455,6 +456,7 @@ class V1VecEnv(VecEnv):
             self.joint_friction[lanes] = loss[:, 0]
             self.robot.set_dofs_frictionloss(np.repeat(loss, 12, axis=1), self.indices[6:], envs_idx=lanes)
         self.residual[lanes] = 0.
+        self.residual_stats.reset(lanes)
         t = self.lane_tick/self.rates.physics_hz
         gains = self._base_gain(t)
         self._set_gains(lanes, gains[lanes])
@@ -481,6 +483,7 @@ class V1VecEnv(VecEnv):
         self.joint_friction = np.zeros(n)
         self.episode = [None]*n
         self.residual = np.zeros((n, len(self.action_joints)))
+        self.residual_stats = PostContactResidual(n, self.action_joints)
         self.command = np.zeros((n, 18))
         self.breaks = BreakMonitor(n, self.config.break_consecutive_steps)
         self.slip = SlipTracker(n)
@@ -553,6 +556,7 @@ class V1VecEnv(VecEnv):
             region = self.region_normal_force()
             self.wall_s['physics'] += time.perf_counter()-tick
             self.peak_region = np.maximum(self.peak_region, region.max(-1))
+            self.residual_stats.update(region, self.residual, 1/self.rates.physics_hz, ~failed)
             broken = self.breaks.update(region, self.f_break, ~failed)
             reason[broken] = 'break'
             failed |= broken
@@ -647,7 +651,7 @@ class V1VecEnv(VecEnv):
             peak_all_robot_contact_force_N=float(self.peak_all_load[i]),
             mean_abs_residual_rad=float(self.residual_abs_integral[i]/duration),
             reward_terms=dict(zip(REWARD_TERMS, self.terms[i].tolist())), **{'return': float(self.returns[i])},
-            sim_duration_s=float(self.elapsed[i]))
+            sim_duration_s=float(self.elapsed[i]), **self.residual_stats.metrics(i))
 
     # -------------------------------------------------------------- protocol
     def _write_protocol(self):

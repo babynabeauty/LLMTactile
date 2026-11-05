@@ -49,6 +49,34 @@ def action_joints(shapes):
     return tuple(sorted({j for shape in shapes for j in hand_shape_joints(shape)}))
 
 
+def action_exploration_stds(joints, action_std_init):
+    """Expand grouped action-unit stds by hand-local joint ID, preserving action order."""
+    if not isinstance(action_std_init, dict):
+        raise ValueError('action_std_init must be a dictionary of joint groups; regenerate the experiment JSON')
+    groups = {'thumb_flexion', 'finger_flexion', 'other'}
+    if set(action_std_init) != groups:
+        raise ValueError('action_std_init must contain thumb_flexion, finger_flexion and other')
+    values = {}
+    for group in groups:
+        value = action_std_init[group]
+        if isinstance(value, bool) or not np.isscalar(value):
+            raise ValueError(f'action_std_init.{group} must be finite and positive')
+        try:
+            value = float(value)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(f'action_std_init.{group} must be finite and positive') from exc
+        if not np.isfinite(value) or value <= 0:
+            raise ValueError(f'action_std_init.{group} must be finite and positive')
+        values[group] = value
+    result = []
+    for joint in joints:
+        if joint not in range(12):
+            raise ValueError(f'Unknown hand-local action joint {joint}')
+        group = 'thumb_flexion' if joint in (1, 2) else 'other' if joint in (0, 3) else 'finger_flexion'
+        result.append(values[group])
+    return tuple(result)
+
+
 def scaled_object(object_id, object_spec, factor):
     """A demonstrated object scaled by factor: id suffix _x085 for 0.85, every length scaled."""
     return f'{object_id}_x{round(factor*100):03d}', asdict(ObjectSpec.from_value(object_spec).scaled(factor))

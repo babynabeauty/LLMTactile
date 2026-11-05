@@ -35,7 +35,7 @@ from .control_protocol import (V1_RATES, current_control_protocol,
 from .normalized_sde_policy import NormalizedSDEMultiInputPolicy
 from .tactile_provenance import current_tactile_model, require_checkpoint_tactile_compatibility
 from .v1_bases import TRAINING_LABELS, experiment_action_joints, load_experiment, load_library, sha256
-from .v1_task import V1Config, SamplerConfig
+from .v1_task import V1Config, SamplerConfig, action_exploration_stds
 
 METHODS = {'tactile': dict(use_tactile=True, use_level=True),
            'no_tactile': dict(use_tactile=False, use_level=True),
@@ -234,7 +234,8 @@ def make_model(env, settings, seed, method, *, resume=None):
                 raise ValueError(f'{resume} was trained with a different tactile input than {method}')
             model.set_random_seed(seed)
         else:
-            kwargs = policy_kwargs(use_tactile=use_touch, action_std_init=float(settings['action_std_init']))
+            stds = action_exploration_stds(env.get_attr('action_joints')[0], settings['action_std_init'])
+            kwargs = policy_kwargs(use_tactile=use_touch, action_std_init=float(settings['action_std_init']['other']))
             kwargs['optimizer_kwargs'] = {'eps': float(settings['adam_eps'])}
             model = CPUTrainingPPO(NormalizedSDEMultiInputPolicy, env, seed=seed, device='cpu', verbose=1,
                 n_steps=int(settings['n_steps']), batch_size=int(settings['batch_size']),
@@ -242,10 +243,12 @@ def make_model(env, settings, seed, method, *, resume=None):
                 gamma=float(settings['gamma']), gae_lambda=float(settings['gae_lambda']), use_sde=True,
                 sde_sample_freq=int(settings['sde_sample_freq']), clip_range=.2, ent_coef=.001, vf_coef=.5,
                 max_grad_norm=.5, target_kl=.03, policy_kwargs=kwargs)
-            # Start exactly on the base: zero residual mean, exploration unchanged.
+            # Start on the base in mean; unit-length gSDE features give each joint its grouped std.
             with torch.no_grad():
                 model.policy.action_net.weight.zero_()
                 model.policy.action_net.bias.zero_()
+                for k, std in enumerate(stds):
+                    model.policy.log_std[:, k] = math.log(std)
     if model.n_steps*env.num_envs % model.batch_size:
         raise ValueError('Rollout size must divide into complete minibatches')
     model.control_protocol = current_control_protocol()
@@ -348,7 +351,10 @@ def run_suite(args, experiment):
 
 def dry_run(experiment):
     libraries = [load_library(obj['base_library']) for obj in experiment['objects']]
-    report = {'action_joints': list(experiment_action_joints(experiment, libraries))}
+    joints = experiment_action_joints(experiment, libraries)
+    stds = action_exploration_stds(joints, experiment['training']['action_std_init'])
+    report = {'action_joints': list(joints),
+              'action_std_init_by_joint': {str(joint): std for joint, std in zip(joints, stds)}}
     for obj, (library, bases) in zip(experiment['objects'], libraries):
         report[obj['object_id']] = dict(object_spec=library['object_spec'], hand_shape=library['hand_shape'],
             labels={label: sum(b.label == label for b in bases) for label in ('S', 'R', 'U')},
