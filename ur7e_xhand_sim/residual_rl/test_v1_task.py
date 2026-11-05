@@ -173,6 +173,10 @@ class BreakAndSlipTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             V1Config(stable_hold_s=0.)
 
+    def test_reward_scale_must_be_positive(self):
+        with self.assertRaises(ValueError):
+            V1Config(reward_scale=0.)
+
     def test_support_is_thumb_or_palm_against_another_finger(self):
         regions = np.zeros((5, 7))
         regions[0, [0, 1]] = .1        # pinch: thumb + index

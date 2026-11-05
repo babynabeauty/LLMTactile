@@ -128,8 +128,10 @@ def experiment_action_joints(experiment, libraries):
     return action_joints(shapes)
 
 
+# Exploration noise: 0.03 of the residual bound (~0.3 N per joint at gain 1), drawn once per rollout.
+# 0.12 redrawn every 2 s kept held objects moving, so training episodes rarely stayed still for 2 s.
 TRAINING_DEFAULTS = dict(n_steps=512, batch_size=1024, n_epochs=5, learning_rate=3e-4, gamma=1., gae_lambda=.95**.25,
-    use_sde=True, normalize_sde_latent=True, sde_sample_freq=120, action_std_init=.12, adam_eps=1e-5,
+    use_sde=True, normalize_sde_latent=True, sde_sample_freq=-1, action_std_init=.03, adam_eps=1e-5,
     seeds=[1, 2, 3], methods=['tactile', 'no_tactile', 'tactile_no_level'], checkpoint_every=262144)
 STAGES = [dict(name='stage1', levels=[4], requested_timesteps=2621440),
           dict(name='stage2', levels=[1, 2, 3, 4], requested_timesteps=2621440, resume_previous=True)]

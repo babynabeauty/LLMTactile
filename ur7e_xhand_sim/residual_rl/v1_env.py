@@ -544,6 +544,7 @@ class V1VecEnv(VecEnv):
         self.terms[:, 4] -= change
         failed, succeeded = np.zeros(n, dtype=bool), np.zeros(n, dtype=bool)
         reason = np.array(['']*n, dtype=object)
+        window = None
         for sub in range(self.rates.action_stride):
             tick = time.perf_counter()
             self.scene.step()
@@ -555,6 +556,8 @@ class V1VecEnv(VecEnv):
             broken = self.breaks.update(region, self.f_break, ~failed)
             reason[broken] = 'break'
             failed |= broken
+            # The soft penalty sees every physics step since the last sample, like the break check.
+            window = region if window is None else np.maximum(window, region)
             if (sub+1) % self.rates.tactile_stride:
                 continue
             self._sample_tactile()
@@ -568,8 +571,9 @@ class V1VecEnv(VecEnv):
             terms = np.stack([
                 c.progress_weight*np.clip(m['clearance_m']/.07, 0, 1)*any_support*dt,
                 -c.force_weight*m['all_robot_load_N']*dt,
-                -break_soft_rate(m['region_normal_N'], self.f_break, c)*dt,
+                -break_soft_rate(window, self.f_break, c)*dt,
                 -c.slip_weight_per_mm*slip_m*1000.], axis=1)*~failed[:, None]
+            window = None
             reward += terms.sum(-1)
             self.terms[:, :4] += terms
             fault = (m['table_normal_N'] > c.table_fault_N) | m['self_contact']
@@ -594,6 +598,12 @@ class V1VecEnv(VecEnv):
         # Success ends the episode as soon as the object has stayed still in the hand long enough.
         success = succeeded & ~failed
         done = failed | success | (self.lane_tick >= self.lane_end)
+        # Success ends the episode before the base does; the lift reward for the rest of the base is paid at
+        # the full rate, so holding still never costs lift reward.
+        remaining_s = np.maximum(self.lane_end-self.lane_tick, 0)/self.rates.physics_hz
+        lift = c.progress_weight*remaining_s*success
+        reward += lift
+        self.terms[:, 0] += lift
         terminal = np.where(success, c.success_bonus, -c.failure_penalty)*done
         reward += terminal
         self.terms[:, 5] += terminal
@@ -614,7 +624,7 @@ class V1VecEnv(VecEnv):
             obs = self._obs()
         self._pending_action = None
         self.wall_s['step'] += time.perf_counter()-started
-        return obs, reward.astype(np.float32), done, infos
+        return obs, (reward*c.reward_scale).astype(np.float32), done, infos
 
     def _episode_metrics(self, i, success, reason):
         base, spec = self.bases[self.lane_base[i]], self.episode[i]
@@ -669,6 +679,10 @@ class V1VecEnv(VecEnv):
                     'object lowest point is >= config.lift_clearance_m, thumb or palm plus another finger touch it '
                     '(normal >= support threshold) and its palm-frame pose stays within config.stable_shift_m and '
                     'config.stable_rotation_deg of the interval start; no break, no collision, not dropped before',
+            reward='per-sample lift, force, near-break (peak over the physics steps since the last sample) and slip '
+                   'terms, residual slew per action, +success/-failure at the end; a success also gets the lift term '
+                   'at its full rate for the rest of the base; PPO receives every reward times config.reward_scale, '
+                   'logged returns and terms are unscaled',
             link_regions=self.link_regions, bases=[b.summary() for b in self.bases],
             excluded_bases=self.excluded_bases, prefix_wall_s=self.prefix_wall_s,
             takeover_states=[dict(base_id=b.base_id, prefix_contact_N=s['prefix_contact_N'],

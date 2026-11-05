@@ -151,14 +151,12 @@ class TrainingCallback(BaseCallback):
             self.mark = None
 
     def _on_training_start(self):
-        self.returns = np.zeros(self.training_env.num_envs)
         self.lengths = np.zeros(self.training_env.num_envs, dtype=np.int64)
         self.next_checkpoint = self.num_timesteps+self.checkpoint_every
 
     def _on_step(self):
         for row in self.shape_exposure.values():
             row['transitions'] += self.lanes
-        self.returns += self.locals['rewards']
         self.lengths += 1
         for i, (done, info) in enumerate(zip(self.locals['dones'], self.locals['infos'])):
             if not done:
@@ -168,12 +166,13 @@ class TrainingCallback(BaseCallback):
             row['episodes'] += 1
             row['task_successes'] += int(metrics['task_success'])
             self.task_successes += int(metrics['task_success'])
+            # The environment's own return is unscaled; PPO's rewards are times config.reward_scale.
             self.handle.write(to_json({'episode_index': self.episode_count, 'env_index': i,
-                'return': float(self.returns[i]), 'policy_steps': int(self.lengths[i]),
+                'return': float(info['episode']['r']), 'policy_steps': int(self.lengths[i]),
                 'training_timesteps': self.num_timesteps, 'success': bool(metrics['success']),
                 'episode_metrics': metrics})+'\n')
             self.episode_count += 1
-            self.returns[i] = self.lengths[i] = 0
+            self.lengths[i] = 0
         if self.num_timesteps >= self.next_checkpoint:
             self.model.save(self.output/'checkpoints'/f'ppo_{self.num_timesteps:09d}')
             self.next_checkpoint = self.num_timesteps+self.checkpoint_every

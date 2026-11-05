@@ -3,8 +3,11 @@
 Every controller sees exactly the same episodes (base x material x feasible
 level, one F_break each). --base-only replays the base (Astra only, zero
 residual); a fixed gain replaces the recorded gain after takeover, residual zero.
+--residual-grid runs every constant residual of the S/R/U repair test, from first
+contact or from takeover, to bound what the residual action can achieve.
 """
 import argparse
+import collections
 import json
 from pathlib import Path
 
@@ -13,6 +16,7 @@ import numpy as np
 from .v1_bases import load_experiment, sha256
 from .control_protocol import current_control_protocol, require_checkpoint_control_compatibility
 from .tactile_provenance import require_checkpoint_tactile_compatibility
+from .v1_label import CONTACT_N, candidate_names, candidates
 from .v1_task import SamplerConfig, episode_specs, minimum_grip_force
 
 # Held-out grid; 0.3 kg at friction 0.3 needs more grip than the hand can give and is left out.
@@ -49,6 +53,44 @@ def summarize(rows):
     return out
 
 
+def grid_vectors(child):
+    """The repair test's constant residuals as normalized actions in one scene's action space."""
+    joints = np.asarray(child.action_joints).tolist()
+    return np.array([[c.get(j, 0.) for j in joints] for c in candidates(child.hand_shape)])/child.config.residual_bound_rad
+
+
+def grid_action(env, vectors, k, after_contact):
+    """Candidate k in every lane; with after_contact a lane starts once the hand touches the object."""
+    parts = []
+    for child, v in zip(env.envs, vectors):
+        on = child.peak_region > CONTACT_N if after_contact else np.ones(child.num_envs, dtype=bool)
+        parts.append(np.where(on[:, None], v[k], 0.))
+    return np.concatenate(parts).astype(np.float32)
+
+
+def print_grid(controllers):
+    """Each candidate's outcomes, then per hand shape, level and material the episodes some candidate solved."""
+    names = candidate_names()
+    print('%-30s success  drop  break  unstable' % 'candidate')
+    for name, rows in zip(names, controllers.values()):
+        count = lambda reason: sum(r['termination_reason'] == reason for r in rows)
+        print('%-30s %3d/%-3d %4d %6d %9d' % (name, sum(r['success'] for r in rows), len(rows),
+              count('dropped'), count('break'), count('unstable')))
+    total, solved, wins = collections.defaultdict(set), collections.defaultdict(set), collections.defaultdict(collections.Counter)
+    for k, rows in enumerate(controllers.values()):
+        for r in rows:
+            group, episode = (r['hand_shape'], r['level'], r['mass_kg'], r['friction']), (r['base_id'], r['f_break_N'])
+            total[group].add(episode)
+            if r['success']:
+                solved[group].add(episode)
+                wins[group][k] += 1
+    print('\nshape   level    kg    mu  solved  best candidate (episodes)')
+    for group in sorted(total):
+        best = wins[group].most_common(1)
+        print('%-7s %5d %5.2f %5.2f  %2d/%-3d  %s' % (*group, len(solved[group]), len(total[group]),
+              '%s (%d)' % (names[best[0][0]], best[0][1]) if best else '-'))
+
+
 def assign_specs(env, materials, levels, seed):
     for i, child in enumerate(env.envs):
         specs = episode_specs(range(len(child.bases)), materials, levels, seed*1000+i)
@@ -73,6 +115,8 @@ def main(argv=None):
     mode.add_argument('--base-only', action='store_true')
     mode.add_argument('--fixed-gains', type=float, nargs='+')
     mode.add_argument('--checkpoint', type=Path)
+    mode.add_argument('--residual-grid', choices=['contact', 'takeover'],
+                      help="the repair test's constant residuals, from first contact or from takeover")
     p.add_argument('--method', choices=sorted(METHODS), default='tactile')
     args = p.parse_args(argv)
     experiment = load_experiment(args.experiment_json)
@@ -97,6 +141,13 @@ def main(argv=None):
                     child.fixed_gain = gain
                 assign_specs(env, args.materials, args.levels, args.seed)
                 controllers[f'fixed_gain_{gain:g}'] = run_episodes(env, zero)
+        elif args.residual_grid:
+            vectors = [grid_vectors(child) for child in env.envs]
+            after_contact = args.residual_grid == 'contact'
+            for k in range(len(vectors[0])):
+                assign_specs(env, args.materials, args.levels, args.seed)
+                controllers[f'grid_{k:02d}'] = run_episodes(env, lambda obs, k=k: grid_action(env, vectors, k, after_contact))
+            summary.update(residual_grid=args.residual_grid, candidates=candidate_names())
         else:
             model = CPUTrainingPPO.load(args.checkpoint, device='cpu')
             summary.update(checkpoint=str(args.checkpoint.resolve()), checkpoint_sha256=sha256(args.checkpoint),
@@ -109,7 +160,10 @@ def main(argv=None):
                     stream.write(to_json(row)+'\n')
             summary[name] = summarize(rows)
         (args.output/'summary.json').write_text(to_json(summary, indent=2))
-        print(json.dumps({k: summary[k]['all'] for k in controllers}, indent=2))
+        if args.residual_grid:
+            print_grid(controllers)
+        else:
+            print(json.dumps({k: summary[k]['all'] for k in controllers}, indent=2))
     finally:
         env.close()
 

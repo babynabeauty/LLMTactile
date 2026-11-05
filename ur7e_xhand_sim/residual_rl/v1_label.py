@@ -32,6 +32,12 @@ def candidates(hand_shape):
     return grid+[{joint: value} for joint in (0, 3) for value in (-.1, .1)]
 
 
+def candidate_names():
+    """Labels for candidates(), in the same order for every hand shape."""
+    return [f'thumb {a:+.3f}, fingers {b:+.3f}' for a in GRID for b in GRID]+[
+        f'joint {joint} {value:+.1f}' for joint in (0, 3) for value in (-.1, .1)]
+
+
 def quaternion_matrix(q):
     w, x, y, z = q
     return np.array([[1-2*(y*y+z*z), 2*(x*y-w*z), 2*(x*z+w*y)], [2*(x*y+w*z), 1-2*(x*x+z*z), 2*(y*z-w*x)],

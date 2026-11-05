@@ -80,6 +80,10 @@ class V1Config:
     residual_change_weight: float = .005*15/V1_RATES.action_hz
     success_bonus: float = 25.
     failure_penalty: float = 200.
+    # PPO sees every reward times this (critic targets about -2.6..0.3 instead of -260..30); logged returns
+    # and reward terms keep the units above. SB3 clips the joint actor+critic gradient norm, so large value
+    # errors also shrank every actor step.
+    reward_scale: float = .01
     table_fault_N: float = 5.
     support_threshold_N: float = .05
 
@@ -95,6 +99,8 @@ class V1Config:
             raise ValueError('Residual bound and rate must be positive')
         if self.stable_hold_s <= 0:
             raise ValueError('stable_hold_s must be positive')
+        if self.reward_scale <= 0:
+            raise ValueError('reward_scale must be positive')
 
 
 @dataclass(frozen=True)
