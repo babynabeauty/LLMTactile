@@ -1,0 +1,22 @@
+<robot name="TestTubeSlot">
+  <link name="TestTubeSlot">
+    <inertial>
+      <origin xyz="0.0052948761963720215 -7.163103429186542e-11 0.041571211512489076" />
+      <mass value="1.0" />
+      <inertia ixx="0.001520898858763751" ixy="-5.441175154035476e-13" ixz="-0.00022305455946019395" iyy="0.001470447871327681" iyz="2.7061057669362484e-12" izz="0.0016737092882746429" />
+    </inertial>
+    <visual>
+      <geometry>
+        <mesh filename="TestTubeSlot_visual.obj" />
+      </geometry>
+      <material name="TestTubeSlot_original_color">
+        <color rgba="0.7990986704826355 0.21586069464683533 0.04970664158463478 1.0" />
+      </material>
+    </visual>
+    <collision>
+      <geometry>
+        <mesh filename="TestTubeSlot.obj" />
+      </geometry>
+    </collision>
+  </link>
+</robot>

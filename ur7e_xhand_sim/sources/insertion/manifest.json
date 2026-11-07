@@ -1,0 +1,596 @@
+{
+  "schema": "ur7e_xhand_insertion_assets_v1",
+  "units": "m",
+  "scale": 1.0,
+  "sources": {
+    "univtac": {
+      "project_url": "https://github.com/univtac/UniVTAC",
+      "commit": "d541e5568227ca3b66104d294f63c80acad7c52c",
+      "sha256": {
+        "assets/objects/TestTube.usd": "6d7c78c389e1ab7a44c00c74f6c93f7ef56db16a334b2989fa1ace47ccfb42f2",
+        "assets/objects/TestTubeBase.usd": "fcbccd23dbd7c3a31af53325c587597542985abd839720ed68e24c89721acbe6",
+        "assets/objects/TestTubeSlot.usd": "7f0663f5f12528d438bcdc7525d42ce3df8956f71514744452cc634117e4957f",
+        "envs/insert_tube.py": "6cb6b82995cf1948ddd5ed4b00fb2974fa4087a33a1f1862458fd72276b36f05",
+        "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+      },
+      "license": "Repository root LICENSE is Apache-2.0; copied as LICENSE-UniVTAC.txt. README says MIT, an upstream inconsistency.",
+      "conversion": "USD mesh vertices transformed through complete local-to-world Xform at default time; metersPerUnit=1; no rescaling. Visual OBJ retains original face-varying corner normals and unwelded vertices; collision OBJ is separately welded. Original base_color_factor retained.",
+      "mass_note": "30g tube mass is a local simulation assumption; source density=10 kg/m3 is not reused."
+    },
+    "contactworld": {
+      "project_url": "https://github.com/PokuangZhou/ContactWorld",
+      "asset_release_url": "https://huggingface.co/datasets/Pokuang/ContactWorld",
+      "sha256": {
+        "industreal/mesh/TVB_mesh/manifeel_usb_plug.obj": "8f7ed08e30edc0edfbc22c4935b7cf63a2b0d572c7ed4d912fef3970463045c7",
+        "industreal/mesh/TVB_mesh/manifeel_usb_socket.obj": "567732beea90414c76f114af4b246d955ed0017b91080b2acdb88e3f58052cc4",
+        "industreal/urdf/USB_plug.urdf": "83ef7158177650ca92f318a50126bbafd5c28b26e1a0597ecb06fd51d86ea34c",
+        "industreal/urdf/USB_socket.urdf": "33b5b2380f78d78f0639e263f867780bea628ab39b6701110b5728ecb8dc121e"
+      },
+      "license": "No root LICENSE found in the inspected ContactWorld checkout; released asset license not established. No license grant is inferred here.",
+      "conversion": "Meter-scale original OBJ geometry, unchanged visible vertices/faces; external MTL references removed in favor of original URDF solid colors. Socket collision only welds identical seam vertices.",
+      "mass_note": "50g plug mass is a local simulation assumption; source has no explicit inertial."
+    }
+  },
+  "tasks": {
+    "tube_insert": {
+      "source_key": "univtac",
+      "movable": {
+        "name": "tube",
+        "role": "tube",
+        "urdf_path": "TestTube.urdf",
+        "visual_mesh_path": "TestTube_visual.obj",
+        "collision_mesh_path": "TestTube.obj",
+        "bounds_m": [
+          [
+            -0.009999999776482582,
+            -0.009999999776482582,
+            0.0
+          ],
+          [
+            0.009999999776482582,
+            0.009999999776482582,
+            0.12999999523162842
+          ]
+        ],
+        "bounds_size_m": [
+          0.019999999552965164,
+          0.019999999552965164,
+          0.12999999523162842
+        ],
+        "volume_m3": 3.951830142817997e-05,
+        "center_of_mass_m": [
+          2.6964604672989616e-10,
+          -8.164312239464237e-12,
+          0.06667592590086924
+        ],
+        "inertia_per_kg": [
+          [
+            0.0013631189844574834,
+            -2.0249626153125265e-12,
+            8.328686137634195e-12
+          ],
+          [
+            -2.0249626153125265e-12,
+            0.0013631189827081175,
+            1.7216637408830759e-13
+          ],
+          [
+            8.328686137634195e-12,
+            1.7216637408830759e-13,
+            4.914830727588154e-05
+          ]
+        ],
+        "mass_kg": 0.03,
+        "color_rgba": [
+          0.023153208196163177,
+          0.023153379559516907,
+          0.02315337024629116,
+          1.0
+        ],
+        "morph_options": {
+          "align": false,
+          "convexify": true,
+          "decimate": false,
+          "watertighten": null
+        },
+        "material_options": {},
+        "collision_description": "Original transformed mesh, unchanged closed surface; convex tube.",
+        "collision_bounds_m": [
+          [
+            -0.01,
+            -0.01,
+            0.0
+          ],
+          [
+            0.01,
+            0.01,
+            0.13
+          ]
+        ],
+        "collision_bounds_size_m": [
+          0.02,
+          0.02,
+          0.13
+        ]
+      },
+      "fixed": [
+        {
+          "name": "holder",
+          "role": "holder",
+          "urdf_path": "TestTubeBase.urdf",
+          "visual_mesh_path": "TestTubeBase_visual.obj",
+          "collision_mesh_path": "TestTubeBase.obj",
+          "bounds_m": [
+            [
+              -0.02500000037252903,
+              -0.02500000037252903,
+              0.0
+            ],
+            [
+              0.02500000037252903,
+              0.02500000037252903,
+              0.05000000074505806
+            ]
+          ],
+          "bounds_size_m": [
+            0.05000000074505806,
+            0.05000000074505806,
+            0.05000000074505806
+          ],
+          "volume_m3": 0.00010896305760821195,
+          "center_of_mass_m": [
+            -4.221629281497989e-11,
+            1.1051099594422143e-11,
+            0.02475888946807418
+          ],
+          "inertia_per_kg": [
+            [
+              0.00044657637531458916,
+              2.9661001125173093e-13,
+              -7.006773238383934e-13
+            ],
+            [
+              2.9661001125173093e-13,
+              0.00044657637532936005,
+              -2.6558523400390496e-14
+            ],
+            [
+              -7.006773238383934e-13,
+              -2.6558523400390496e-14,
+              0.00047016343494645164
+            ]
+          ],
+          "mass_kg": 1.0,
+          "color_rgba": [
+            0.023153208196163177,
+            0.023153379559516907,
+            0.02315337024629116,
+            1.0
+          ],
+          "morph_options": {
+            "align": false,
+            "convexify": false,
+            "decimate": false,
+            "watertighten": null
+          },
+          "material_options": {
+            "sdf_cell_size": 0.0005,
+            "sdf_max_res": 256
+          },
+          "collision_description": "Original transformed mesh, unchanged closed surface; non-convex SDF retains original hole; no hull or wrap.",
+          "collision_bounds_m": [
+            [
+              -0.025,
+              -0.025,
+              0.0
+            ],
+            [
+              0.025,
+              0.025,
+              0.05
+            ]
+          ],
+          "collision_bounds_size_m": [
+            0.05,
+            0.05,
+            0.05
+          ]
+        },
+        {
+          "name": "socket",
+          "role": "socket",
+          "urdf_path": "TestTubeSlot.urdf",
+          "visual_mesh_path": "TestTubeSlot_visual.obj",
+          "collision_mesh_path": "TestTubeSlot.obj",
+          "bounds_m": [
+            [
+              -0.05000000074505806,
+              -0.05000000074505806,
+              0.0
+            ],
+            [
+              0.05000000074505806,
+              0.05000000074505806,
+              0.10000000149011612
+            ]
+          ],
+          "bounds_size_m": [
+            0.10000000149011612,
+            0.10000000149011612,
+            0.10000000149011612
+          ],
+          "volume_m3": 0.0007740922008946754,
+          "center_of_mass_m": [
+            0.0052948761963720215,
+            -7.163103429186542e-11,
+            0.041571211512489076
+          ],
+          "inertia_per_kg": [
+            [
+              0.001520898858763751,
+              -5.441175154035476e-13,
+              -0.00022305455946019395
+            ],
+            [
+              -5.441175154035476e-13,
+              0.001470447871327681,
+              2.7061057669362484e-12
+            ],
+            [
+              -0.00022305455946019395,
+              2.7061057669362484e-12,
+              0.0016737092882746429
+            ]
+          ],
+          "mass_kg": 1.0,
+          "color_rgba": [
+            0.7990986704826355,
+            0.21586069464683533,
+            0.04970664158463478,
+            1.0
+          ],
+          "morph_options": {
+            "align": false,
+            "convexify": false,
+            "decimate": false,
+            "watertighten": null
+          },
+          "material_options": {
+            "sdf_cell_size": 0.0005,
+            "sdf_max_res": 256
+          },
+          "collision_description": "Original transformed mesh, unchanged closed surface; non-convex SDF retains original hole; no hull or wrap.",
+          "collision_bounds_m": [
+            [
+              -0.05,
+              -0.05,
+              0.0
+            ],
+            [
+              0.05,
+              0.05,
+              0.1
+            ]
+          ],
+          "collision_bounds_size_m": [
+            0.1,
+            0.1,
+            0.1
+          ]
+        }
+      ],
+      "target": {
+        "opening_center_local_m": [
+          -0.00781781,
+          0,
+          0.07650077
+        ],
+        "axis_local": [
+          -0.5,
+          0.0,
+          0.8660254037844386
+        ],
+        "object_quat_wxyz": [
+          0.9659258262890683,
+          0.0,
+          -0.25881904510252074,
+          0.0
+        ],
+        "tip_local_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "hole_diameter_m": 0.021,
+        "reference_insertion_depth_m": 0.04,
+        "opening_definition": "Exact sloped mesh mouth center; source policy uses approximate [-.008,0,.077]."
+      },
+      "initial_holder_tip_local_m": [
+        0.0,
+        0.0,
+        0.002
+      ]
+    },
+    "usb_insert": {
+      "source_key": "contactworld",
+      "movable": {
+        "name": "usb",
+        "role": "plug",
+        "urdf_path": "USB_plug.urdf",
+        "visual_mesh_path": "USB_plug_visual.obj",
+        "collision_mesh_path": "USB_plug_body_collision.obj",
+        "bounds_m": [
+          [
+            -0.00717,
+            -0.01495,
+            -0.0
+          ],
+          [
+            0.005,
+            0.01505,
+            0.120958
+          ]
+        ],
+        "bounds_size_m": [
+          0.01217,
+          0.03,
+          0.120958
+        ],
+        "volume_m3": 3.590402818287283e-05,
+        "center_of_mass_m": [
+          -0.001152572594406362,
+          5.76106600789274e-05,
+          0.06845017944518735
+        ],
+        "inertia_per_kg": [
+          [
+            0.0009925486895960918,
+            2.981111009231435e-09,
+            1.0008444157678427e-06
+          ],
+          [
+            2.981111009231435e-09,
+            0.000933960581626062,
+            4.36872024846874e-07
+          ],
+          [
+            1.0008444157678427e-06,
+            4.36872024846874e-07,
+            8.082257864280323e-05
+          ]
+        ],
+        "mass_kg": 0.05,
+        "color_rgba": [
+          0.3,
+          0.3,
+          1.0,
+          1.0
+        ],
+        "morph_options": {
+          "align": false,
+          "convexify": true,
+          "decimate": false,
+          "watertighten": null
+        },
+        "material_options": {
+          "sdf_cell_size": 0.00025,
+          "sdf_max_res": 256
+        },
+        "collision_description": "Closed proxy: original handle convex hull cropped at z=22mm, four 0.6mm metal shell walls, and internal plastic box. Source open surfaces, latch slots, handle cavity and flexible tabs are simplified. External visual is unchanged; connector cavity and keyed side are retained. Mass/inertia use the closed proxy solids, with an assumed total 50g mass.",
+        "collision_primitives": [
+          {
+            "mesh": "USB_plug_body_collision.obj"
+          },
+          {
+            "center": [
+              -0.0027,
+              0.0,
+              0.011
+            ],
+            "size": [
+              0.0006,
+              0.022,
+              0.022
+            ]
+          },
+          {
+            "center": [
+              0.0027,
+              0.0,
+              0.011
+            ],
+            "size": [
+              0.0006,
+              0.022,
+              0.022
+            ]
+          },
+          {
+            "center": [
+              0.0,
+              -0.0107,
+              0.011
+            ],
+            "size": [
+              0.0048,
+              0.0006,
+              0.022
+            ]
+          },
+          {
+            "center": [
+              0.0,
+              0.0107,
+              0.011
+            ],
+            "size": [
+              0.0048,
+              0.0006,
+              0.022
+            ]
+          },
+          {
+            "center": [
+              -0.0014,
+              0.0004,
+              0.011
+            ],
+            "size": [
+              0.002,
+              0.02,
+              0.022
+            ]
+          }
+        ],
+        "collision_bounds_m": [
+          [
+            -0.00717,
+            -0.01495,
+            0.0
+          ],
+          [
+            0.00483,
+            0.01505,
+            0.120958
+          ]
+        ],
+        "collision_bounds_size_m": [
+          0.012,
+          0.03,
+          0.120958
+        ]
+      },
+      "fixed": [
+        {
+          "name": "socket",
+          "role": "socket",
+          "urdf_path": "USB_socket.urdf",
+          "visual_mesh_path": "USB_socket_visual.obj",
+          "collision_mesh_path": "USB_socket_collision.obj",
+          "bounds_m": [
+            [
+              -0.024929,
+              -0.033108,
+              -0.01926
+            ],
+            [
+              0.041264,
+              0.033108,
+              0.018
+            ]
+          ],
+          "bounds_size_m": [
+            0.066193,
+            0.066216,
+            0.03726
+          ],
+          "volume_m3": 8.293543162614e-05,
+          "center_of_mass_m": [
+            0.008509057336234301,
+            -1.583696885954468e-07,
+            0.0002669923741972103
+          ],
+          "inertia_per_kg": [
+            [
+              0.0003182965605888363,
+              -1.040250860013204e-10,
+              -2.8399832489248144e-06
+            ],
+            [
+              -1.040250860013204e-10,
+              0.0003172790529386694,
+              2.9621265425175154e-10
+            ],
+            [
+              -2.8399832489248144e-06,
+              2.9621265425175154e-10,
+              0.000392036588712599
+            ]
+          ],
+          "mass_kg": 1.0,
+          "color_rgba": [
+            1.0,
+            0.3,
+            0.3,
+            1.0
+          ],
+          "morph_options": {
+            "align": false,
+            "convexify": false,
+            "decimate": false,
+            "watertighten": null
+          },
+          "material_options": {
+            "sdf_cell_size": 0.00025,
+            "sdf_max_res": 320
+          },
+          "collision_description": "Original watertight socket surface with seam vertices welded. Non-convex SDF preserves rectangular hole and tongue.",
+          "collision_bounds_m": [
+            [
+              -0.024929,
+              -0.033108,
+              -0.01926
+            ],
+            [
+              0.041264,
+              0.033108,
+              0.018
+            ]
+          ],
+          "collision_bounds_size_m": [
+            0.066193,
+            0.066216,
+            0.03726
+          ]
+        }
+      ],
+      "target": {
+        "opening_center_local_m": [
+          0.0,
+          0.0,
+          0.018
+        ],
+        "axis_local": [
+          0.0,
+          0.0,
+          1.0
+        ],
+        "object_quat_wxyz": [
+          0.0,
+          0.0,
+          0.0,
+          1.0
+        ],
+        "tip_local_m": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "opening_size_xy_m": [
+          0.00918,
+          0.0234
+        ],
+        "reference_insertion_depth_m": 0.017,
+        "keying": "180 degree local-Z rotation places plug plastic on +X, clear of socket tongue on -X."
+      }
+    }
+  },
+  "packaged_sha256": {
+    "LICENSE-UniVTAC.txt": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "TestTube.obj": "820b2008d61a2b8f2aca6fff9aac841834d37987f229539b06e0cd96a3aa2aea",
+    "TestTube.urdf": "b7315ab4ed00af1fe40e352821453bde0ca2964622f64e4b02e4139a2011ab79",
+    "TestTubeBase.obj": "f6e638a8b8b3aeaa16c9631718ac65bb1b645d3d0dafc27714a94c7075bf2d59",
+    "TestTubeBase.urdf": "ecc6f460630332baebfd667876e7b649e5839afcc6d2754dd1e8c6a084987465",
+    "TestTubeSlot.obj": "06c5bd3fd7f2a22d19430b50b266241e185da4db82dd13654ca5638b019d022a",
+    "TestTubeSlot.urdf": "22550224ebe221391da0029f26c093581e373daa9c27d0de84c108415cd61c5f",
+    "USB_plug.urdf": "cb0f14b86886d38db03c2fe8a5a003f1eef1a87e4f5f4346f737d71a0b688006",
+    "USB_plug_body_collision.obj": "066195c07deb0ac763f85c5d321e303bba8b0253c3fdd02bbdaebeaa66313bd5",
+    "USB_plug_visual.obj": "9b694519d09a0296899bfc1921a2cde5ebcbd39eb6c2f3be76cb9b0ba92ee00e",
+    "USB_socket.urdf": "da1f544959c94c70adf4fa9b163f06f5b38226c336cadcbdd665255ebe29dcf7",
+    "USB_socket_collision.obj": "01a4866ed368883a29f712a6df00d9f69ba31f10052130aa9ab3d34b54027228",
+    "USB_socket_visual.obj": "41d8f72ba5a60a309cce4bd1008ddba75009547839fa8546cd32f5a2deb0ab6d",
+    "TestTube_visual.obj": "e278d6db5217ca5c77c941f6865fc9f7d9ceecb97cffb2d61668e171886bcacc",
+    "TestTubeBase_visual.obj": "c28e5e817446883a6e12280275ee7b603861564caf6224e3a4ac5973e5d77b16",
+    "TestTubeSlot_visual.obj": "abe2c03f400604f93e3b818e2f00eb3540df3274d6603dbd4282d41dd37fb0eb"
+  }
+}

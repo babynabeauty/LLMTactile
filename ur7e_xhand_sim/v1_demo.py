@@ -74,10 +74,27 @@ def validate_spec(spec):
         raise ValueError('grip_gain must lie in [.2, 3]')
 
 
+def validate_finger_armature(value):
+    """Optional diagnostic rotor inertia; None preserves the loaded model."""
+    if value is None:
+        return None
+    message = 'finger_armature must be None or a finite nonnegative scalar in kg m²'
+    if isinstance(value, (bool, np.bool_)) or not np.isscalar(value):
+        raise ValueError(message)
+    try:
+        value = float(value)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(message) from exc
+    if not np.isfinite(value) or value < 0:
+        raise ValueError(message)
+    return value
+
+
 class SpecDemo:
     """300 Hz physics, 60 Hz records, targets at 60 Hz in close/test_lift/lift and 15 Hz otherwise;
     the object is never moved by the script."""
-    def __init__(self, sim, output, spec):
+    def __init__(self, sim, output, spec, *, finger_armature=None):
+        self.finger_armature = validate_finger_armature(finger_armature)
         validate_spec(spec)
         self.sim, self.spec = sim, dict(spec)
         self.out = Path(output).resolve()
@@ -89,11 +106,13 @@ class SpecDemo:
         self.eval_record = (self.out/'evaluation.jsonl').open('w', buffering=1)
         sim.render_enabled = False
         sim.reset()
+        self._configure_finger_armature()
         self.home_quat = sim.array(sim.wrist.get_quat()).reshape(4)
         self.home_pos = sim.array(sim.wrist.get_pos()).reshape(3)
         self.set_gain(1.)
         write(self.out/'manifest.json', {'schema': 'ur7e_xhand_v1_demo', 'spec': self.spec,
             'object_spec': sim.object_spec.protocol(), 'solver_profile': sim.solver_profile,
+            **self.armature_metadata,
             'robot_joint_order': sim.names, 'control_dt_s': 1/60, 'physics_dt_s': 1/300,
             'target_update_hz': {'settle': 15, 'approach': 15, 'align': 15, 'close': 60, 'test_lift': 60,
                                  'lift': 60, 'hold': 15},
@@ -101,6 +120,25 @@ class SpecDemo:
             'closure': 'fixed interpolation from open to closed hand, no tactile feedback',
             'pd_scaling': 'hand-shape finger kp multiplied by grip gain, kv by sqrt(gain); effort limits unchanged',
             'collision_rule': f'any robot self contact or robot/table normal >{TABLE_LIMIT_N} N stops the run'})
+
+    def _configure_finger_armature(self):
+        """Apply after reset, before motion; all twelve fingers, independent of hand shape."""
+        s = self.sim
+        before = s.array(s.robot.get_dofs_armature(s.indices)).copy().reshape(18)
+        if self.finger_armature is not None:
+            s.robot.set_dofs_armature(np.full(12, self.finger_armature, np.float32), s.indices[6:])
+        after = s.array(s.robot.get_dofs_armature(s.indices)).copy().reshape(18)
+        np.testing.assert_array_equal(after[:6], before[:6],
+                                      err_msg='Diagnostic override changed arm armatures')
+        if self.finger_armature is None:
+            np.testing.assert_array_equal(after, before)
+        else:
+            np.testing.assert_allclose(after[6:], self.finger_armature, rtol=1e-6, atol=0,
+                                       err_msg='Finger armature readback differs from override')
+        self.armature_readback = dict(joint_names=list(s.names), dofs_idx_local=list(s.indices),
+            before_kg_m2=before.tolist(), after_kg_m2=after.tolist())
+        self.armature_metadata = dict(finger_armature_override_kg_m2=self.finger_armature,
+                                      armature_readback=self.armature_readback)
 
     def set_gain(self, gain):
         s = self.sim
@@ -272,14 +310,17 @@ class SpecDemo:
         files += [f"{row['image_dir']}/{view}.jpg" for row in self.stages for view in VIEWS]
         write(self.out/'reference.json', {'schema': 'ur7e_xhand_genesis_success_reference_v1',
             'review_status': 'simulation_verified', 'run_dir': str(self.out), 'validation': score,
+            **self.armature_metadata,
             'hand_shape': self.hand_shape, 'grasp_quaternion_wxyz': c['palm_quaternion_wxyz'],
             'open_hand_target_rad': c['open_hand_rad'], 'closed_hand_target_rad': c['closed_hand_rad'],
             'light_hand_target_rad': stages['light_contact']['sent_joint_target_rad'][6:],
             'hand_joint_order': HAND_JOINTS, 'arm_joint_order': ARM_JOINTS, 'not_hardware_calibration': True,
             'files': {name: sha(self.out/name) for name in files}})
         trajectory = sha(self.out/'control.jsonl')
-        write(self.out/'trajectory_metadata.json', {'trajectory_sha256': trajectory, 'solver_profile': self.sim.solver_profile})
+        write(self.out/'trajectory_metadata.json', {'trajectory_sha256': trajectory,
+            'solver_profile': self.sim.solver_profile, **self.armature_metadata})
         write(self.out/'demo.json', {'schema': 'v1_demo', 'object_id': c['object_id'], 'object_spec': c['object_spec'],
+            **self.armature_metadata,
             'hand_shape': self.hand_shape, 'palm_offset_m': c['palm_offset_m'],
             'close_translation_m': c.get('close_translation_m', [0., 0., 0.]),
             'approach_motion': 'open start, light closure during approach, full closure at pregrasp',
@@ -302,7 +343,13 @@ def main():
     p.add_argument('--spec', type=Path, required=True)
     p.add_argument('--output', type=Path, required=True)
     p.add_argument('--scale', type=float, default=1., help='object scale for a size check (not a demonstration)')
+    p.add_argument('--finger-armature', type=float, default=None,
+                   help='diagnostic inertia override for all 12 finger joints in kg m²; default keeps the model')
     args = p.parse_args()
+    try:
+        finger_armature = validate_finger_armature(args.finger_armature)
+    except ValueError as exc:
+        p.error(str(exc))
     spec = json.loads(args.spec.read_text())
     if args.scale != 1:
         object_id, object_spec = scaled_object(spec['object_id'], spec['object_spec'], args.scale)
@@ -311,7 +358,7 @@ def main():
     sim = Sandbox(output_dir=args.output.parent/f'runtime_{args.output.name}', render=False, cube_mass_kg=.05,
         cube_friction=.8, robot_friction=.8, object_spec=spec['object_spec'], physics_dt_s=1/300,
         control_substeps=5, noslip_iterations=5, deterministic=True)
-    score = SpecDemo(sim, args.output, spec).run()
+    score = SpecDemo(sim, args.output, spec, finger_armature=finger_armature).run()
     print(json.dumps(score), flush=True)
     raise SystemExit(0 if score['success'] else 1)
 

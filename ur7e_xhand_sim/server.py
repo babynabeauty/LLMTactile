@@ -10,8 +10,10 @@ def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--port', type=int, default=8767)
     p.add_argument('--output')
-    p.add_argument('--object-spec-json', type=json.loads, required=True)
-    p.add_argument('--cube-mass-g', type=float, default=50.)
+    p.add_argument('--task', choices=('grasp','tube_insert','usb_insert'), default='grasp')
+    p.add_argument('--object-spec-json', type=json.loads)
+    p.add_argument('--cube-mass-g', type=float,
+                   help='Movable object mass in grams; default 50 for grasp, packaged mass for insertion')
     p.add_argument('--cube-friction', type=float, default=.8)
     p.add_argument('--robot-friction', type=float, default=.8)
     p.add_argument('--table-contact-force-limit-n', type=float, default=5.)
@@ -22,6 +24,10 @@ def main():
     p.add_argument('--no-realtime', action='store_true',
                    help='Online test mode: run as fast as possible; simulated control is still 60 Hz')
     args = p.parse_args()
+    if args.task == 'grasp' and args.object_spec_json is None:
+        p.error('--object-spec-json is required for grasp')
+    if args.task != 'grasp' and (args.object_spec_json is not None or args.online):
+        p.error('Insertion scenes supply their own assets and currently use manual synchronous control; omit --object-spec-json and --online')
     if (args.residual_checkpoint or args.no_realtime) and not args.online:
         p.error('--residual-checkpoint and --no-realtime require --online')
     from environment import Sandbox
@@ -29,7 +35,9 @@ def main():
     http_class = ThreadingHTTPServer if args.online else HTTPServer
     http = http_class(('127.0.0.1', args.port), BaseHTTPRequestHandler)
     try:
-        sim = Sandbox(output_dir=args.output, object_spec=args.object_spec_json, cube_mass_kg=args.cube_mass_g/1000,
+        mass_g = args.cube_mass_g if args.cube_mass_g is not None else (50. if args.task == 'grasp' else None)
+        sim = Sandbox(output_dir=args.output, task=args.task, object_spec=args.object_spec_json,
+            cube_mass_kg=mass_g/1000 if mass_g is not None else None,
             cube_friction=args.cube_friction, robot_friction=args.robot_friction,
             table_contact_force_limit_N=args.table_contact_force_limit_n, physics_dt_s=1/300, control_substeps=5,
             noslip_iterations=5, deterministic=True)
@@ -43,6 +51,8 @@ def main():
         """Called exclusively by the main scene-owner thread in both modes."""
         nonlocal trial, closed
         if command == 'trial_start':
+            if sim.task != 'grasp':
+                raise ValueError('BasePolicyV1 demonstrations and grasp scoring do not support insertion; use scene controls')
             if trial is not None:
                 raise ValueError('One trial per bridge server')
             from base_policy_v1 import BasePolicyV1
@@ -74,6 +84,12 @@ def main():
             return dict(sim.status(), online_control=False)
         if command == 'evaluate':
             return sim.evaluate()
+        if command in ('reset','step','move','hand'):
+            if args.online or trial is not None:
+                raise ValueError('Direct scene controls require synchronous mode without an active trial')
+            if command == 'reset':
+                return sim.reset(payload.get('seed',42))
+            return getattr(sim,command)(payload)
         if command == 'close':
             closed = True
             return {'closed': True}

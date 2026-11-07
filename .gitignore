@@ -97,3 +97,6 @@ Genesis/genesis/ext/VolumeSampling
 
 # Small platform CAD required by the default UR7e/XHand scene.
 !ur7e_xhand_sim/sources/platform/base_link.STL
+
+# Portable mesh assets for the two insertion scenes.
+!ur7e_xhand_sim/sources/insertion/**/*.obj

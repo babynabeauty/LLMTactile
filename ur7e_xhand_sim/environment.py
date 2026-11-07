@@ -27,11 +27,22 @@ class Sandbox:
                  cube_density=None, cube_mass_kg=None, cube_friction=.8, robot_friction=.8,
                  silicone=False, silicone_substeps=None, silicone_contact_softness=.002,
                  silicone_skip_idle_pcg=True, silicone_solver='ipc', silicone_maxvolume=1e-7,
-                 object_spec=None, physics_dt_s=.005, control_substeps=5,
+                 object_spec=None, physics_dt_s=None, control_substeps=5,
                  noslip_iterations=0, noslip_tolerance=1e-6, deterministic=False,
-                 table_contact_force_limit_N=5.0, overview=False):
+                 table_contact_force_limit_N=5.0, overview=False, task='grasp'):
         from contact_guard import validate_table_force_limit
+        if task not in ('grasp', 'tube_insert', 'usb_insert'):
+            raise ValueError('task must be grasp, tube_insert, or usb_insert')
+        self.task = task
+        self.insertion = None
+        if task != 'grasp':
+            if object_spec is not None or scenario != 'original' or silicone or test_fixture:
+                raise ValueError('Insertion tasks supply their own objects and fixtures; use the original scenario')
+            from insertion_scene import InsertionScene
+            self.insertion = InsertionScene(task)
         self.table_contact_force_limit_N=validate_table_force_limit(table_contact_force_limit_N)
+        if physics_dt_s is None:
+            physics_dt_s = 1/300 if self.insertion else .005
         if (isinstance(physics_dt_s,bool) or not np.isfinite(physics_dt_s)
                 or not .001 <= physics_dt_s <= .01
                 or type(control_substeps) is not int or not 1 <= control_substeps <= 20):
@@ -41,8 +52,9 @@ class Sandbox:
         self.control_dt_s=self.physics_dt_s*self.control_substeps
         self.solver_profile=normalize_solver_profile({'schema':'genesis_rigid_solver_profile_v1',
             'noslip_iterations':noslip_iterations,'noslip_tolerance':noslip_tolerance})
-        self.object_spec = ObjectSpec.from_value('cube' if object_spec is None else object_spec)
-        self.legacy_object_placement = object_spec is None
+        self.object_spec = (self.insertion.object_spec if self.insertion else
+                            ObjectSpec.from_value('cube' if object_spec is None else object_spec))
+        self.legacy_object_placement = object_spec is None and self.insertion is None
         if object_spec is not None and silicone:
             raise ValueError('The multi-object study is rigid-only; silicone cannot be enabled')
         if silicone_solver not in ('legacy','ipc'):
@@ -54,8 +66,10 @@ class Sandbox:
             raise ValueError('silicone_substeps must be positive')
         if cube_density is not None and cube_mass_kg is not None:
             raise ValueError('Specify cube density or mass, not both')
+        default_density = (self.insertion.assets['movable']['mass_kg']/self.object_spec.volume_m3
+                           if self.insertion else 500.)
         density = (float(cube_mass_kg)/self.object_spec.volume_m3 if cube_mass_kg is not None
-                   else float(cube_density) if cube_density is not None else 500.)
+                   else float(cube_density) if cube_density is not None else default_density)
         if not np.isfinite(density) or density <= 0:
             raise ValueError('Cube density/mass must be finite and positive')
         if any(not np.isfinite(v) or not .01 <= v <= 5 for v in (cube_friction,robot_friction)):
@@ -98,12 +112,18 @@ class Sandbox:
                 **({'coup_type':'two_way_soft_constraint'} if ipc else {})))
         offsets={'original':(0,0,0),'small':(.03,.02,0),'large':(.15,.10,0),'clutter':(0,0,0),'small_clutter':(.03,.02,0)}
         if scenario not in offsets:raise ValueError('Unknown scenario')
-        position=self._initial_object_position(offsets[scenario])
+        position=(self.insertion.position if self.insertion else self._initial_object_position(offsets[scenario]))
         self.scenario={'name':scenario,'target_initial_position_m':position.tolist(),'translation_m':offsets[scenario],'distractors':[]}
         self.scenario['object_spec']=self.object_spec.protocol()
-        self.cube = self.scene.add_entity(self._object_morph(position),
-            material=gs.materials.Rigid(rho=density,friction=cube_friction,
-                **({'coup_type':'two_way_soft_constraint'} if ipc else {})),surface=gs.surfaces.Default(color=(.95,.36,.10,1)))
+        self.task_fixtures = {}
+        if self.insertion:
+            self.cube, self.task_fixtures = self.insertion.add_entities(
+                self.scene, gs, cube_friction)
+        else:
+            self.cube = self.scene.add_entity(self._object_morph(position),
+                material=gs.materials.Rigid(rho=density,friction=cube_friction,
+                    **({'coup_type':'two_way_soft_constraint'} if ipc else {})),surface=gs.surfaces.Default(color=(.95,.36,.10,1)))
+        self.object = self.cube  # Generic name; retain cube for existing grasp code.
         self.distractors={}
         if scenario in ('clutter','small_clutter'):
             specs=[('blue_box','box',(.12,.12),(.1,.25,.9,1)),
@@ -170,7 +190,12 @@ class Sandbox:
         if overview:
             self.overview_camera=self.scene.add_camera(res=(1200,900),
                 pos=(-2.1,-2.5,1.7),lookat=(-.12,-.2,.15),fov=48,GUI=False)
+            if self.insertion:
+                self.task_camera=self.scene.add_camera(res=(1200,900),
+                    pos=(-1.02,-.94,.88),lookat=(-.50,-.245,.275),fov=38,GUI=False)
         self.scene.build(n_envs=1)
+        if self.insertion:
+            self.cube.set_mass(self.material_parameters['cube_mass_kg'])
         self.solver_readback=validate_solver_readback(self.solver_profile,
             read_solver_readback(self.scene.rigid_solver))
         initial_materials = self._object_material_readback()
@@ -179,7 +204,8 @@ class Sandbox:
         np.testing.assert_allclose(initial_materials['object_engine_inertia_kg_m2'],
             self.material_parameters['cube_mass_kg']*self.object_spec.inertia_per_kg,rtol=1e-4,atol=1e-9)
         np.testing.assert_allclose(initial_materials['object_bounds_readback_m'],
-            self.object_spec.bounds_size_m,rtol=0,atol=1e-7)
+            (self.insertion.assets['movable']['collision_bounds_size_m'] if self.insertion
+             else self.object_spec.bounds_size_m),rtol=0,atol=1e-7)
         self.fem_pcg_stats = None
         if silicone and silicone_skip_idle_pcg and not ipc:
             from fem_diagnostics import skip_inactive_pcg_iterations
@@ -239,12 +265,26 @@ class Sandbox:
     def _object_material_readback(self):
         mass = float(self.array(self.cube.get_mass()).reshape(-1)[0])
         inertia = self.array(self.cube.get_links_inertia()).reshape(-1,3,3)[0]
-        bounds = np.ptp(self.array(self.cube.base_link.geoms[0].init_verts),axis=0)
+        if getattr(self, 'insertion', None):
+            # Genesis stores URDF inertia in principal axes. Report it about the
+            # COM in source-link axes, matching the packaged mass properties.
+            iq = self.array(self.cube.base_link.desc.inertial_quat)
+            iR = Rotation.from_quat(iq[[1,2,3,0]]).as_matrix()
+            inertia = iR@inertia@iR.T
+            vertices = []
+            for geom in self.cube.base_link.geoms:
+                q = self.array(geom.init_quat)
+                R = Rotation.from_quat(q[[1,2,3,0]]).as_matrix()
+                vertices.append(self.array(geom.init_verts)@R.T+self.array(geom.init_pos))
+            bounds = np.ptp(np.concatenate(vertices),axis=0)
+        else:
+            bounds = np.ptp(self.array(self.cube.base_link.geoms[0].init_verts),axis=0)
         return {'cube_engine_mass_kg':mass,'object_engine_mass_kg':mass,
                 'object_engine_inertia_kg_m2':inertia.tolist(),
                 'object_engine_density_kg_m3':mass/self.object_spec.volume_m3,
                 'object_bounds_readback_m':bounds.tolist(),
-                'density_readback_definition':'solver mass divided by analytic primitive volume'}
+                'density_readback_definition':('solver mass divided by imported inertial model volume'
+                    if getattr(self, 'insertion', None) else 'solver mass divided by analytic primitive volume')}
 
     def values(self,value):
         return self.array(value).reshape(-1).astype(float).tolist()
@@ -311,6 +351,7 @@ class Sandbox:
 
     def describe(self):
         return {'robot':'UR7e (850 mm) + XHAND1 right','joint_order':self.names,
+                'task':self.task, 'insertion_scene':self.insertion.describe() if self.insertion else None,
                 'online_table_contact_guard':{'limit_N':self.table_contact_force_limit_N,
                     'metric':'sum of robot/table solver normal forces', 'stop_when':'strictly greater than limit',
                     'self_collision':'stop on any self contact','sample_dt_s':self.control_dt_s},
@@ -375,6 +416,7 @@ class Sandbox:
         links={l.idx:l for l in self.scene.rigid_solver.links}
         entities={self.robot.idx:'ur7e_xhand',self.table.idx:'table',self.cube.idx:'cube'}
         entities.update({entity.idx:name for name,entity in self.distractors.items()})
+        entities.update({entity.idx:name for name,entity in getattr(self,'task_fixtures',{}).items()})
         if self.fixture is not None:
             entities[self.fixture.idx]='test_sphere'
         rows=[]
@@ -400,7 +442,7 @@ class Sandbox:
         position=self.values(self.cube.get_pos())
         quaternion=self.values(self.cube.get_quat())
         bottom=float(position[2]-self.object_spec.vertical_extent(np.asarray(quaternion)))
-        return {'cube_position_m':position,'cube_quaternion_wxyz':quaternion,
+        result = {'cube_position_m':position,'cube_quaternion_wxyz':quaternion,
                 'object_position_m':position.copy(),'object_quaternion_wxyz':quaternion.copy(),
                 'object_spec':self.object_spec.protocol(),
                 'bottom_world_z_m':bottom,'bottom_clearance_m':bottom-.2,
@@ -410,6 +452,9 @@ class Sandbox:
                 'distractor_positions_m':{name:self.values(entity.get_pos()) for name,entity in self.distractors.items()},
                 'silicone':self.silicone_state(),
                 'solver_contacts':rows,'joint_force_Nm':self.values(self.robot.get_dofs_force(self.indices))}
+        if getattr(self, 'insertion', None):
+            result['insertion'] = self.insertion.evaluate(self)
+        return result
 
     def silicone_state(self):
         """Privileged FEM diagnostics; never represented as XHand tactile force."""

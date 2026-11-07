@@ -1,5 +1,8 @@
 # v1 全流程命令
 
+新增场景入口：试管插入 `tube_insert`、USB 插入 `usb_insert`，预览与启动方式见
+[场景说明](SCENES.zh-CN.md)。下列 V1 流程仍针对原有抓取任务。
+
 在仿真机的仓库根目录执行。方案见 `PLAN_v1.md`。
 
 ## 0. 准备
@@ -48,9 +51,13 @@ uv pip install --python .venv/bin/python --no-deps -r ur7e_xhand_sim/residual_rl
 
 ```bash
 .venv/bin/python ur7e_xhand_sim/v1_demo.py --spec configs/v1/demos/cuboid_pinch.json --output outputs/v1/demos/cuboid_pinch
+
+
+采集方块的成功示范，三种手型
+for s in pinch tripod wrap; do .venv/bin/python ur7e_xhand_sim/v1_demo.py --spec configs/v1/demos/cuboid_$s.json --output outputs/v1/demos_v3/cuboid_$s; done
+
 ```
 
-尺寸检查：全部示范成功后，每个参数文件在 0.85× 和 1.15× 上各跑一次，输出放在 `size_check/`，不当示范。
 
 ```bash
 for f in configs/v1/demos/*.json; do b=$(basename $f .json); for s in 0.85 1.15; do
