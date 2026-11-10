@@ -1,0 +1,190 @@
+{
+  "schema": "v1_experiment",
+  "name": "cuboid_single_stage_five_profiles_V1_5_T1_T2",
+  "objects": [
+    {
+      "object_id": "cuboid_pinch",
+      "base_library": "/home/sai/Documents/ChatGPT/Shiqi/tactile-genesis/outputs/v1/mini2/labels_armature003_position_hold_v3/cuboid_pinch_train.json"
+    },
+    {
+      "object_id": "cuboid_tripod",
+      "base_library": "/home/sai/Documents/ChatGPT/Shiqi/tactile-genesis/outputs/v1/mini2/labels_armature003_position_hold_v3/cuboid_tripod_train.json"
+    },
+    {
+      "object_id": "cuboid_wrap",
+      "base_library": "/home/sai/Documents/ChatGPT/Shiqi/tactile-genesis/outputs/v1/mini2/labels_armature003_position_hold_v3/cuboid_wrap_train.json"
+    }
+  ],
+  "lanes_per_object": 4,
+  "hand_shapes": [
+    "pinch",
+    "tripod",
+    "wrap"
+  ],
+  "config": {
+    "lift_clearance_m": 0.02,
+    "stable_hold_s": 3.0,
+    "stable_shift_m": 0.005,
+    "break_consecutive_steps": 5
+  },
+  "sampler": {
+    "material_profiles": [
+      {
+        "level": 3,
+        "mass_kg": 0.1,
+        "friction": 0.45,
+        "f_break_N": 5.0
+      },
+      {
+        "level": 3,
+        "mass_kg": 0.1,
+        "friction": 0.45,
+        "f_break_N": 4.0
+      },
+      {
+        "level": 3,
+        "mass_kg": 0.25,
+        "friction": 0.5,
+        "f_break_N": 10.0
+      },
+      {
+        "level": 3,
+        "mass_kg": 0.25,
+        "friction": 0.5,
+        "f_break_N": 7.0
+      },
+      {
+        "level": 4,
+        "mass_kg": 0.5,
+        "friction": 0.5,
+        "f_break_N": null
+      }
+    ],
+    "mass_range_kg": [
+      0.1,
+      0.5
+    ],
+    "friction_range": [
+      0.45,
+      0.5
+    ],
+    "narrow_fraction": 0.0,
+    "astra_error_rate": 0.0,
+    "s_offset_fraction": 0.0,
+    "s_offset_variants": 0,
+    "material_profile_sampling": "uniform_profiles",
+    "max_grip_force_N": 5.0
+  },
+  "joint_friction_Nm": [
+    0.0,
+    0.0
+  ],
+  "tactile_noise_N": 0.0,
+  "training": {
+    "n_steps": 512,
+    "batch_size": 1024,
+    "n_epochs": 5,
+    "learning_rate": 0.0003,
+    "gamma": 1.0,
+    "gae_lambda": 0.9872585449014338,
+    "use_sde": true,
+    "normalize_sde_latent": true,
+    "sde_sample_freq": -1,
+    "action_std_init": {
+      "thumb_flexion": 0.2,
+      "finger_flexion": 0.1,
+      "other": 0.03
+    },
+    "adam_eps": 1e-05,
+    "seeds": [
+      1
+    ],
+    "methods": [
+      "tactile"
+    ],
+    "checkpoint_every": 61440
+  },
+  "stages": [
+    {
+      "name": "single_stage",
+      "levels": [
+        3,
+        4
+      ],
+      "requested_timesteps": 141312
+    }
+  ],
+  "control_protocol": {
+    "schema": "v1_control_protocol",
+    "version": "v1_tactile60_control60_v3",
+    "physics_hz": 300,
+    "tactile_hz": 60,
+    "action_hz": 60,
+    "base_hz": 60,
+    "base_target_sampling": "recorded_command_zero_order_hold_on_integer_ticks",
+    "history_samples": 12,
+    "history_duration_s": 0.2,
+    "state_time_feature": "elapsed_since_close_div10_clipped",
+    "state_time_scale_s": 10.0,
+    "state_lookahead_feature": "(next_nominal-nominal)/(1.5 rad/s*action_dt)",
+    "takeover": "first_close_on_60_hz_grid; reset_pose_with_zero_velocity",
+    "residual_update": "one_inference_per_new_tactile_sample"
+  },
+  "finger_armature_kg_m2": 0.003,
+  "success_rule": "lift_position_hold_v3",
+  "actor_conditioning": "force_limit_N_v1",
+  "run_protocol": {
+    "variant": "V1.5",
+    "comparison_variant": "V1",
+    "initialization": "Resume the shared V1 checkpoint with identical weights and Adam state; change only per-finger exploration covariance.",
+    "source_checkpoint": "/home/sai/Documents/ChatGPT/Shiqi/tactile-genesis/outputs/v1/mini2/single_stage_cuboid_five_profiles/part_02/final_model.zip",
+    "source_checkpoint_sha256": "34bac606e3fc2cc0335b5f779831b6ca0ce5de1a0be532781d8e3e581b452fa9",
+    "initial_timesteps": 122880,
+    "additional_timesteps": 141312,
+    "total_timesteps": 264192,
+    "checkpoint_timesteps": [
+      184320,
+      245760,
+      264192
+    ],
+    "evaluation_timesteps": [
+      264192
+    ],
+    "evaluation_episodes": 30,
+    "profile_probability": 0.2,
+    "no_auto_extension": true,
+    "tasks": "T1 unlimited and T2 finite force profiles trained jointly"
+  },
+  "exploration_protocol": {
+    "version": "finger_correlated_sde_v1",
+    "correlation": 0.8,
+    "groups": [
+      [
+        1,
+        2
+      ],
+      [
+        4,
+        5
+      ],
+      [
+        6,
+        7
+      ],
+      [
+        8,
+        9
+      ],
+      [
+        10,
+        11
+      ]
+    ],
+    "independent_joints": [
+      0,
+      3
+    ],
+    "preserve_marginal_std": true,
+    "preserve_action_dimensions": true
+  }
+}

@@ -9,22 +9,24 @@ import hashlib
 import json
 import numpy as np
 
+from residual_rl.v1_conditioning import LEVEL, condition_features, conditioning_size, conditioning_protocol
 from residual_rl.control_protocol import (V1_RATES, HISTORY_SAMPLES,
     current_control_protocol, elapsed_feature, lookahead_feature, require_checkpoint_control_compatibility)
 from residual_rl.tactile_provenance import require_checkpoint_tactile_compatibility
-from residual_rl.v1_task import (V1Config, FINGERS, PHASES, HAND_SHAPES, hand_shape_joints,
+from residual_rl.v1_task import (V1Config, FINGERS, PHASES, HAND_SHAPES, SUCCESS_RULE, hand_shape_joints,
     limit_residual, REGIONS, link_region, opposing_support, score_lift)
 
 
 def actor_state(q, qd, command, nominal, future, lower, upper, gain, phase,
-                elapsed_s, astra_level, use_level, finger_mask, residual, bound):
+                elapsed_s, astra_level, use_level, finger_mask, residual, bound, *,
+                actor_conditioning=LEVEL, force_limit_N=None):
     """One V1 actor row, in exactly the training environment's feature order."""
     lower, upper = np.asarray(lower), np.asarray(upper)
     mid, half = (lower+upper)/2, (upper-lower)/2
     value = np.concatenate([(np.asarray(q)-mid)/half, np.clip(np.asarray(qd)/3, -10, 10),
         (np.asarray(command)-q)/.2, lookahead_feature(future, nominal), [gain-1],
         [phase == p for p in PHASES], [float(elapsed_feature(elapsed_s))],
-        np.eye(4)[astra_level-1]*use_level, finger_mask, np.asarray(residual)/bound]).astype(np.float32)
+        condition_features(actor_conditioning, astra_level, force_limit_N, use_level), finger_mask, np.asarray(residual)/bound]).astype(np.float32)
     if not np.isfinite(value).all():
         raise FloatingPointError('Nonfinite online actor state')
     return value
@@ -32,7 +34,7 @@ def actor_state(q, qd, command, nominal, future, lower, upper, gain, phase,
 
 class OnlineResidual:
     def __init__(self, sim, hand_shape, gain, *, checkpoint=None, zero=False, astra_level=4,
-                 model=None, metadata=None):
+                 model=None, metadata=None, force_limit_N=None):
         if not np.isclose(sim.control_dt_s, V1_RATES.action_dt, rtol=0, atol=1e-10):
             raise ValueError('Online residual requires a 60 Hz Sandbox control step')
         if checkpoint is not None and zero:
@@ -68,6 +70,9 @@ class OnlineResidual:
         self.active = np.isin(self.action_joints, own).astype(float)
         self.controlled = self.action_joints+6
         self.mask = np.asarray([f in HAND_SHAPES[hand_shape] for f in FINGERS], np.float32)
+        self.actor_conditioning = metadata.get("actor_conditioning", LEVEL)
+        self.force_limit_N = force_limit_N
+        condition_features(self.actor_conditioning, astra_level, force_limit_N)
         self.use_level = bool(metadata.get('use_level', True))
         self.astra_level = astra_level
         self.residual = np.zeros(len(self.action_joints))
@@ -80,7 +85,7 @@ class OnlineResidual:
         self.last_raw_action = np.zeros(len(self.action_joints))
         self.last_observation = None
         if self.model is not None:
-            expected_state = 18*4+1+len(PHASES)+1+4+len(FINGERS)+len(self.action_joints)
+            expected_state = 18*4+1+len(PHASES)+1+conditioning_size(self.actor_conditioning)+len(FINGERS)+len(self.action_joints)
             if self.model.action_space.shape != (len(self.action_joints),):
                 raise ValueError('Checkpoint action dimension differs from its joint metadata')
             spaces = self.model.observation_space.spaces
@@ -98,6 +103,8 @@ class OnlineResidual:
             zero_residual=self.zero, action_joints=self.action_joints.tolist(),
             active_action_joints=self.active.tolist(), config=asdict(self.config),
             astra_level=self.astra_level, use_level=self.use_level,
+            actor_conditioning=conditioning_protocol(self.actor_conditioning),
+            supplied_force_limit_N=(None if self.force_limit_N is None or np.isinf(self.force_limit_N) else self.force_limit_N),
             tactile_frame='raw link-frame sensor force, matching V1VecEnv sensors.read().force',
             state_time_feature='elapsed simulated seconds since first close / 10, clipped to [0,1]',
             between_skills='hold nominal command; tactile and actor continue; next target delta is zero',
@@ -119,7 +126,8 @@ class OnlineResidual:
         qd = np.asarray([observed['joint_velocities_rad_s'][n] for n in self.sim.names])
         state = actor_state(q, qd, self.command, nominal, future, self.sim.lower, self.sim.upper,
             self.gain, phase, (self.sim.steps-self.start_step)*self.sim.control_dt_s,
-            self.astra_level, self.use_level, self.mask, self.residual, self.config.residual_bound_rad)
+            self.astra_level, self.use_level, self.mask, self.residual, self.config.residual_bound_rad,
+            actor_conditioning=self.actor_conditioning, force_limit_N=self.force_limit_N)
         if first:
             self.proprio = np.repeat(state[None], HISTORY_SAMPLES, axis=0)
         else:
@@ -198,11 +206,13 @@ def strict_online_metrics(control_path, evaluations, control_dt_s, config, fault
         outcome = score_lift(samples, control_dt_s, config)
     reason = 'collision_or_execution_fault' if outcome['reason'] == 'collision' else outcome['reason']
     return dict(strict_success=reason == 'success', termination_reason=reason, slip_distance_m=outcome['slip_m'],
+        success_rule=SUCCESS_RULE,
         lost_limit_m=config.lost_m, longest_stable_s=outcome['longest_stable_s'], stable_hold_s=config.stable_hold_s,
-        lift_clearance_m=config.lift_clearance_m, peak_region_normal_N=peak_region,
+        lift_clearance_m=config.lift_clearance_m, stable_shift_m=config.stable_shift_m,
+        peak_region_normal_N=peak_region,
         contact_guard_fault=reason == 'collision_or_execution_fault',
         fragility_not_simulated=True, f_break_N=None, evaluation_sample_hz=1/control_dt_s,
         evaluation_scope='rigid unbreakable object; no fragility/breakage validation',
         slip_reference='state before first test_lift command, in palm frame',
-        support_rule='thumb or palm and at least one other finger above support threshold',
+        support_rule='diagnostic only; opposing contact is not required for success',
         support_threshold_N=config.support_threshold_N)

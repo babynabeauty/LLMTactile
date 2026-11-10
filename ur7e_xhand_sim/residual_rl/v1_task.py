@@ -5,12 +5,14 @@ and F_break are reward/termination labels only; the actor sees at most the
 Astra fragility level, which is sampled with errors.
 """
 from dataclasses import dataclass, asdict
+from numbers import Real
 import numpy as np
 
 from .multiobject_geometry import ObjectSpec
 from .control_protocol import V1_RATES
 
 GRAVITY = 9.81
+SUCCESS_RULE = 'lift_position_hold_v3'
 LEVEL_BOUNDS_N = (2., 5., 12.)
 LEVEL_RANGES_N = {1: (.8, 2.), 2: (2., 5.), 3: (5., 12.), 4: (12., np.inf)}
 # Force-bearing regions; F_break applies to the normal resultant of each one.
@@ -96,13 +98,12 @@ class V1Config:
     # Slip is penalized, not terminal: the hand may tighten after it. Beyond lost_m of palm-frame
     # displacement the object is no longer held and the episode ends.
     lost_m: float = .03
-    # Success ends the episode: once at least lift_clearance_m off the table, the object keeps
-    # opposing support and stays within stable_shift_m / stable_rotation_deg of one palm-frame
-    # pose for stable_hold_s. Rotation is looser than shift: a two-finger pinch creeps a few
-    # degrees per second about the finger axis while the object center stays put.
+    # Success: stay above lift_clearance_m and within stable_shift_m of the interval-start
+    # palm-frame position for stable_hold_s, without failure.
     lift_clearance_m: float = .02
-    stable_hold_s: float = 2.
-    stable_shift_m: float = .002
+    stable_hold_s: float = 3.
+    stable_shift_m: float = .005
+    # Legacy field kept for existing experiment JSONs; rotation does not gate success.
     stable_rotation_deg: float = 10.
     # Preserve the time integral of normalized squared residual slew speed.
     residual_change_weight: float = .005*15/V1_RATES.action_hz
@@ -134,6 +135,11 @@ class V1Config:
 @dataclass(frozen=True)
 class SamplerConfig:
     levels: tuple = (1, 2, 3, 4)
+    # Optional joint material/force profiles. When present, never independently draw mass,
+    # friction or F_break. Null F_break denotes the unbreakable level-4 control.
+    material_profiles: tuple = ()
+    # Opt in to equal probability per eligible profile; legacy runs remain level-first.
+    material_profile_sampling: str = 'level_first'
     mass_range_kg: tuple = (.05, .3)
     friction_range: tuple = (.2, .8)
     # Above this F_min the hand drops the object even at 2.5x finger stiffness (level-4 sweep,
@@ -173,6 +179,40 @@ class SamplerConfig:
             raise ValueError('s_offset_variants must be a nonnegative integer')
         if not (self.offset_max_m > 0 and self.offset_max_yaw_deg > 0):
             raise ValueError('Offset bounds must be positive')
+        profiles = []
+        for profile in self.material_profiles:
+            if not isinstance(profile, dict) or set(profile) != {'level', 'mass_kg', 'friction', 'f_break_N'}:
+                raise ValueError('material_profiles require level, mass_kg, friction and f_break_N')
+            level = profile['level']
+            if type(level) is not int or level not in LEVEL_RANGES_N:
+                raise ValueError('material profile level must be an integer from 1-4')
+            mass, mu = profile['mass_kg'], profile['friction']
+            if any(isinstance(v, bool) or not isinstance(v, Real) or not np.isfinite(v) or v <= 0
+                   for v in (mass, mu)):
+                raise ValueError('material profile mass and friction must be finite and positive')
+            force = profile['f_break_N']
+            if level == 4:
+                if force is not None:
+                    raise ValueError('level-4 material profiles require null f_break_N')
+                force = np.inf
+            elif (force is None or isinstance(force, bool) or not isinstance(force, Real)
+                  or not np.isfinite(force) or force <= 0):
+                raise ValueError('finite-level material profiles require a positive finite f_break_N')
+            f_min = mass*GRAVITY/(2*mu)
+            if f_min > self.max_grip_force_N or force <= self.feasibility_margin*f_min:
+                raise ValueError('material profile fails the static grip feasibility check')
+            profiles.append(dict(level=level, mass_kg=float(mass), friction=float(mu),
+                                 f_break_N=None if level == 4 else float(force)))
+        if profiles and not set(levels).issubset({p['level'] for p in profiles}):
+            raise ValueError('material_profiles must cover every requested level')
+        keys = [(p['level'], p['mass_kg'], p['friction'], p['f_break_N']) for p in profiles]
+        if len(set(keys)) != len(keys):
+            raise ValueError('material_profiles must be distinct')
+        object.__setattr__(self, 'material_profiles', tuple(profiles))
+        if self.material_profile_sampling not in ('level_first', 'uniform_profiles'):
+            raise ValueError('Unknown material_profile_sampling mode')
+        if self.material_profile_sampling == 'uniform_profiles' and not profiles:
+            raise ValueError('uniform_profiles requires explicit material_profiles')
 
 
 def minimum_grip_force(mass_kg, friction):
@@ -193,11 +233,17 @@ def astra_level(rng, level, cfg):
 
 
 def sample_episode(rng, cfg=SamplerConfig()):
-    """Level first, then a feasible material, so rejection never thins level 1.
+    """Draw levels first by default, or uniformly draw explicit profiles when requested.
 
     Feasible: the hand can hold it (F_min <= max_grip_force_N) and F_break exceeds F_min by the margin.
     """
+    if cfg.material_profiles and cfg.material_profile_sampling == 'uniform_profiles':
+        profiles = [p for p in cfg.material_profiles if p['level'] in cfg.levels]
+        return profile_episode(profiles[rng.integers(len(profiles))], rng, cfg)
     level = int(rng.choice(cfg.levels))
+    if cfg.material_profiles:
+        profiles = [p for p in cfg.material_profiles if p['level'] == level]
+        return profile_episode(profiles[rng.integers(len(profiles))], rng, cfg)
     lo, hi = LEVEL_RANGES_N[level]
     m_lo, m_hi = cfg.mass_range_kg
     narrow = level < 4 and rng.random() < cfg.narrow_fraction
@@ -222,6 +268,16 @@ def sample_episode(rng, cfg=SamplerConfig()):
     return dict(mass_kg=float(mass), friction=float(mu), level=level, f_break_N=float(f_break),
                 astra_level=astra_level(rng, level, cfg), f_min_N=f_min,
                 window_ratio=float(f_break/f_min), narrow_window=bool(narrow))
+
+
+def profile_episode(profile, rng, cfg):
+    """Expand one intact material/force profile for training or deterministic evaluation."""
+    level = profile['level']
+    force = np.inf if profile['f_break_N'] is None else profile['f_break_N']
+    f_min = float(minimum_grip_force(profile['mass_kg'], profile['friction']))
+    return dict(mass_kg=profile['mass_kg'], friction=profile['friction'], level=level,
+                f_break_N=force, astra_level=astra_level(rng, level, cfg), f_min_N=f_min,
+                window_ratio=float(force/f_min), narrow_window=bool(force/f_min <= cfg.narrow_ratio[1]))
 
 
 def limit_residual(action, previous, cfg):
@@ -288,15 +344,14 @@ def pose_change(reference_position, reference_rotation, position, rotation):
 
 
 class StableHold:
-    """How long the object has stayed still in the hand, per lane.
+    """Continuous lifted time within the interval-start palm-frame position tolerance.
 
-    An interval runs while the object is at least lift_clearance_m off the table, has opposing
-    support and stays within stable_shift_m / stable_rotation_deg of its palm-frame pose at the
-    interval start; any violation restarts it at the current sample.
+    Exceeding the translation tolerance restarts the interval at the current position.
+    Rotation and opposing support do not gate success. The caller excludes failed lanes
+    (drop/collision/break); falling below the clearance resets the interval.
     """
     def __init__(self, n):
         self.position = np.zeros((n, 3))
-        self.rotation = np.tile(np.eye(3), (n, 1, 1))
         self.start = np.full(n, np.nan)
         self.lifted = np.zeros(n, dtype=bool)
         self.supported = np.zeros(n, dtype=bool)
@@ -304,6 +359,7 @@ class StableHold:
 
     def reset(self, lanes):
         self.start[lanes] = np.nan
+        self.position[lanes] = 0.
         self.lifted[lanes] = self.supported[lanes] = False
         self.longest[lanes] = 0.
 
@@ -311,13 +367,11 @@ class StableHold:
         """Advance one sample; returns the lanes whose interval has now lasted stable_hold_s."""
         held = active & (clearance >= cfg.lift_clearance_m)
         self.lifted |= held
-        held &= support
-        self.supported |= held
-        shift, angle = pose_change(self.position, self.rotation, position, rotation)
-        still = held & ~np.isnan(self.start) & (shift <= cfg.stable_shift_m) & (angle <= cfg.stable_rotation_deg)
-        restart = held & ~still
-        self.position[restart], self.rotation[restart], self.start[restart] = (
-            position[restart], rotation[restart], now[restart])
+        self.supported |= held & support  # Diagnostic only; not a success requirement.
+        shift = np.linalg.norm(np.asarray(position)-self.position, axis=-1)
+        restart = held & (np.isnan(self.start) | (shift > cfg.stable_shift_m))
+        self.position[restart] = position[restart]
+        self.start[restart] = now[restart]
         self.start[active & ~held] = np.nan
         duration = np.where(np.isnan(self.start), 0., now-self.start)
         self.longest = np.where(active, np.maximum(self.longest, duration), self.longest)
@@ -329,8 +383,8 @@ def score_lift(samples, dt, cfg):
 
     samples: (object-in-palm position m, rotation 3x3, clearance m, opposing support, fault) per
     control step in time order, from the first lifting command on; the first is the slip
-    reference. A collision or drop decides first; success once the object stayed still for
-    stable_hold_s. Returns reason, slip_m, longest_stable_s and decided_at (sample index or None).
+    reference. A collision or drop decides first; success once the object stayed above clearance and within the interval-start
+    position tolerance for stable_hold_s. Returns reason, slip_m, longest_stable_s and decided_at (sample index or None).
     """
     tracker, slip, reference = StableHold(1), 0., None
     for i, (position, rotation, clearance, support, fault) in enumerate(samples):
@@ -341,9 +395,12 @@ def score_lift(samples, dt, cfg):
             np.array([i*dt]), np.array([clearance]), position[None], np.asarray(rotation, float)[None],
             np.array([bool(support)]), np.ones(1, dtype=bool), cfg)[0] else None)
         if reason:
-            return dict(reason=reason, slip_m=slip, longest_stable_s=float(tracker.longest[0]), decided_at=i)
-    reason = 'not_lifted' if not tracker.lifted[0] else 'no_opposing_support' if not tracker.supported[0] else 'unstable'
-    return dict(reason=reason, slip_m=slip, longest_stable_s=float(tracker.longest[0]), decided_at=None)
+            return dict(reason=reason, slip_m=slip, longest_stable_s=float(tracker.longest[0]), decided_at=i,
+                        success_rule=SUCCESS_RULE)
+    # Keep the legacy timeout name; it now means insufficient continuous lifted time within the position tolerance.
+    reason = 'not_lifted' if not tracker.lifted[0] else 'unstable'
+    return dict(reason=reason, slip_m=slip, longest_stable_s=float(tracker.longest[0]), decided_at=None,
+                success_rule=SUCCESS_RULE)
 
 
 def opposing_support(region_normal_N, threshold_N):
@@ -404,6 +461,17 @@ def episode_specs(base_indices, materials, levels, seed, cfg=SamplerConfig()):
     """
     rng = np.random.default_rng(seed)
     specs = []
+    if cfg.material_profiles:
+        selected = []
+        for mass, mu in materials:
+            for level in levels:
+                matches = [p for p in cfg.material_profiles if p['level'] == level
+                           and p['mass_kg'] == mass and p['friction'] == mu]
+                if not matches:
+                    raise ValueError(f'No joint material profile for mass={mass}, friction={mu}, level={level}')
+                selected.extend(matches)
+        return [dict(base_index=int(base), **profile_episode(p, rng, cfg))
+                for base in base_indices for p in selected]
     for base in base_indices:
         for mass, mu in materials:
             f_min = float(minimum_grip_force(mass, mu))

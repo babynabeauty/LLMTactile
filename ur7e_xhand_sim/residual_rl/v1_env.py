@@ -5,8 +5,9 @@ Every base prefix is replayed physically once, in parallel lanes, to obtain
 the robot and object state at takeover; a prefix that touches the object is
 excluded. Each lane then runs its own episodes: reset places robot and object
 in a base's takeover state, samples material and fragility, and continues the
-base with a bounded residual on the hand-shape joints. Mass, friction and
-F_break never enter the actor; only the (possibly wrong) Astra level does.
+base with a bounded residual on the hand-shape joints. Mass and friction never
+enter the actor. For task conditioning, legacy actors receive an Astra level;
+numeric actors receive the explicit task force limit, never measured solver force.
 """
 import json
 import os
@@ -23,6 +24,7 @@ from gymnasium import spaces
 from stable_baselines3.common.vec_env import VecEnv
 import genesis as gs
 
+from .v1_conditioning import LEVEL, FORCE_LIMIT, condition_features, conditioning_size, conditioning_protocol
 from .core import ROOT
 from .control_protocol import (V1_RATES, HISTORY_SAMPLES, current_control_protocol, elapsed_feature,
     lookahead_feature)
@@ -30,7 +32,7 @@ from .multiobject_geometry import ObjectSpec
 from .solver_profile import normalize_solver_profile, read_solver_readback, validate_solver_readback
 from .tactile_provenance import current_tactile_model
 from .v1_metrics import PostContactResidual
-from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, StableHold, REGIONS, FINGERS, PHASES,
+from .v1_task import (V1Config, SamplerConfig, BreakMonitor, SlipTracker, StableHold, SUCCESS_RULE, REGIONS, FINGERS, PHASES,
     HAND_SHAPES, YAW_PERIOD_DEG, base_draw_weights, hand_shape_joints, link_region, limit_residual,
     break_soft_rate, object_offsets, opposing_support, sample_episode, wrap_yaw)
 sys.path.insert(0, str(ROOT/'ur7e_xhand_sim'))
@@ -80,7 +82,7 @@ class V1VecEnv(VecEnv):
     def __init__(self, object_spec, bases, *, n_envs=12, seed=0, output_dir=None, object_id='object',
                  hand_shape='pinch', action_joints=None, config=None, sampler=None, use_level=True,
                  joint_friction_Nm=(0., 0.), tactile_noise_N=0., fixed_gain=None, augment=False,
-                 finger_armature=None):
+                 finger_armature=None, actor_conditioning=LEVEL):
         self.render_mode = None
         self.rates = V1_RATES
         self.config = config or V1Config()
@@ -88,6 +90,10 @@ class V1VecEnv(VecEnv):
         self.object_id = object_id
         self.object_spec = ObjectSpec.from_value(object_spec)
         self.use_level = bool(use_level)
+        self.actor_conditioning = actor_conditioning
+        conditioning_size(actor_conditioning)
+        if actor_conditioning == FORCE_LIMIT and self.sampler.astra_error_rate != 0:
+            raise ValueError("Numeric task limits require astra_error_rate=0; categorical errors cannot represent numeric errors")
         self.joint_friction_Nm = tuple(float(v) for v in joint_friction_Nm)
         if len(self.joint_friction_Nm) != 2 or not 0 <= self.joint_friction_Nm[0] <= self.joint_friction_Nm[1]:
             raise ValueError('joint_friction_Nm must be an ordered nonnegative [low, high] range')
@@ -117,7 +123,7 @@ class V1VecEnv(VecEnv):
         self.controlled = self.action_joints+6
         self.gain_joints = np.asarray(own)+6
         self.finger_mask = np.array([f in HAND_SHAPES[hand_shape] for f in FINGERS], np.float32)
-        self.state_dim = 18*4+1+len(PHASES)+1+4+len(FINGERS)+len(self.action_joints)
+        self.state_dim = 18*4+1+len(PHASES)+1+conditioning_size(self.actor_conditioning)+len(FINGERS)+len(self.action_joints)
         observation_space = spaces.Dict({
             'tactile': spaces.Box(-np.inf, np.inf, (HISTORY_SAMPLES, 5, 120, 3), np.float32),
             'state': spaces.Box(-np.inf, np.inf, (HISTORY_SAMPLES, self.state_dim), np.float32)})
@@ -540,7 +546,8 @@ class V1VecEnv(VecEnv):
         phase = np.array([[self.bases[k].trajectory.phase_at_tick(ti) == p for p in PHASES]
                           for k, ti in zip(self.lane_base, self.lane_tick)], np.float32)
         progress = elapsed_feature((self.lane_tick-self.lane_start)/self.rates.physics_hz)
-        level = np.eye(4, dtype=np.float32)[self.astra_level-1]*self.use_level
+        level = condition_features(getattr(self, "actor_conditioning", LEVEL), self.astra_level,
+            getattr(self, "f_break", None), self.use_level)
         state = np.concatenate([(q-self.mid)/self.half, np.clip(qd/3, -10, 10), (self.command-q)/.2,
             lookahead_feature(future, nominal, self.rates.action_dt), (self.gains-1)[:, None], phase,
             progress[:, None], level,
@@ -632,11 +639,11 @@ class V1VecEnv(VecEnv):
             self.proprio[:, -1] = state
         self.elapsed += self.rates.action_dt
         self.residual_abs_integral += np.abs(self.residual).mean(-1)*self.rates.action_dt
-        # Success ends the episode as soon as the object has stayed still in the hand long enough.
+        # Success ends the episode after enough lifted time within the interval-start position tolerance.
         success = succeeded & ~failed
         done = failed | success | (self.lane_tick >= self.lane_end)
         # Success ends the episode before the base does; the lift reward for the rest of the base is paid at
-        # the full rate, so holding still never costs lift reward.
+        # the full rate, so completing the hold never costs lift reward.
         remaining_s = np.maximum(self.lane_end-self.lane_tick, 0)/self.rates.physics_hz
         lift = c.progress_weight*remaining_s*success
         reward += lift
@@ -650,8 +657,7 @@ class V1VecEnv(VecEnv):
         lanes = np.flatnonzero(done)
         for i in lanes:
             if not reason[i]:
-                reason[i] = ('success' if success[i] else 'not_lifted' if not self.stable.lifted[i]
-                             else 'no_opposing_support' if not self.stable.supported[i] else 'unstable')
+                reason[i] = ('success' if success[i] else 'not_lifted' if not self.stable.lifted[i] else 'unstable')
             infos[i] = dict(episode_metrics=self._episode_metrics(i, bool(success[i]), reason[i]),
                 episode={'r': float(self.returns[i]), 'l': int(round(self.elapsed[i]*self.rates.action_hz))},
                 terminal_observation={k: v[i].copy() for k, v in obs.items()}, **{'TimeLimit.truncated': False})
@@ -676,7 +682,7 @@ class V1VecEnv(VecEnv):
             narrow_window=spec['narrow_window'], spec_index=spec['spec_index'], discard=spec['discard'],
             hand_shape=self.hand_shape, joint_friction_Nm=float(self.joint_friction[i]), fixed_gain=self.fixed_gain,
             max_clearance_m=float(self.max_clearance[i]), slip_distance_m=float(self.slip.distance[i]),
-            longest_stable_s=float(self.stable.longest[i]),
+            longest_stable_s=float(self.stable.longest[i]), success_rule=SUCCESS_RULE,
             peak_region_normal_N=float(self.peak_region[i]),
             lifted_peak_region_normal_N=float(self.lifted_peak_region[i]),
             peak_to_break_ratio=None if np.isinf(spec['f_break_N']) else float(self.peak_region[i]/spec['f_break_N']),
@@ -696,7 +702,9 @@ class V1VecEnv(VecEnv):
             fixed_gain=self.fixed_gain, tactile_model=current_tactile_model(),
             finger_armature_override_kg_m2=self.finger_armature, armature_readback=self.armature_readback,
             solver_profile=self.solver_profile, solver_readback=self.solver_readback,
-            actor_state_fields=list(STATE_FIELDS), state_dim=self.state_dim, privileged_actor_input=False,
+            actor_state_fields=list(STATE_FIELDS[:7])+conditioning_protocol(self.actor_conditioning)["fields"]+list(STATE_FIELDS[8:]),
+            actor_conditioning=conditioning_protocol(self.actor_conditioning),
+            state_dim=self.state_dim, privileged_actor_input=False,
             hand_shape=self.hand_shape, hand_shape_fingers=list(HAND_SHAPES[self.hand_shape]),
             action_joints=self.action_joints.tolist(), active_action_joints=self.active.tolist(),
             action='absolute residual on hand-local action_joints; [-1,1] -> +-bound, rate limited per 60 Hz '
@@ -713,10 +721,12 @@ class V1VecEnv(VecEnv):
             break_rule='normal resultant per region (5 fingers, palm, arm) above F_break for consecutive physics steps',
             slip_rule='largest object displacement in the palm frame since the first test_lift command; '
                       'penalized per mm, never terminal; beyond config.lost_m the object is dropped',
-            success='ends the episode once, at every 60 Hz sample of an interval of config.stable_hold_s, the '
-                    'object lowest point is >= config.lift_clearance_m, thumb or palm plus another finger touch it '
-                    '(normal >= support threshold) and its palm-frame pose stays within config.stable_shift_m and '
-                    'config.stable_rotation_deg of the interval start; no break, no collision, not dropped before',
+            success_rule=SUCCESS_RULE,
+            success='ends the episode once the object lowest point stays >= config.lift_clearance_m above the '
+                    'table and within config.stable_shift_m of its interval-start palm-frame position at every '
+                    '60 Hz sample for config.stable_hold_s; exceeding the position tolerance restarts the '
+                    'timer at the current position; no break, collision or drop before; '
+                    'rotation and opposing support do not reset the hold timer',
             reward='per-sample lift, force, near-break (peak over the physics steps since the last sample) and slip '
                    'terms, residual slew per action, +success/-failure at the end; a success also gets the lift term '
                    'at its full rate for the rest of the base; PPO receives every reward times config.reward_scale, '

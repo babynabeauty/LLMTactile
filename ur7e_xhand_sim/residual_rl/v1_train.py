@@ -29,6 +29,7 @@ from stable_baselines3.common.logger import HumanOutputFormat, KVWriter, Logger
 from stable_baselines3.common.utils import set_random_seed
 
 from .adaptive_policy import policy_kwargs
+from .v1_conditioning import LEVEL, conditioning_protocol, require_checkpoint_conditioning
 from .core import ROOT
 from .control_protocol import (V1_RATES, current_control_protocol,
     require_checkpoint_control_compatibility)
@@ -202,6 +203,8 @@ def stage_of(experiment, name):
 def build_environment(experiment, stage, output, *, seed, method, lanes=None, fixed_gain=None,
                       split='train', labels=TRAINING_LABELS, finger_armature=None):
     from .v1_env import V1VecEnv, V1ComposedVecEnv
+    if finger_armature is None:
+        finger_armature = experiment.get('finger_armature_kg_m2')
     config = V1Config(**experiment.get('config', {}))
     sampler = SamplerConfig(**{**experiment.get('sampler', {}), 'levels': tuple(stage['levels'])})
     libraries = [load_library(obj['base_library'], split=split, labels=labels) for obj in experiment['objects']]
@@ -216,7 +219,8 @@ def build_environment(experiment, stage, output, *, seed, method, lanes=None, fi
                 use_level=METHODS[method]['use_level'],
                 joint_friction_Nm=experiment.get('joint_friction_Nm', [0., 0.]),
                 tactile_noise_N=experiment.get('tactile_noise_N', 0.), fixed_gain=fixed_gain,
-                augment=split == 'train', finger_armature=finger_armature))
+                augment=split == 'train', finger_armature=finger_armature,
+                actor_conditioning=experiment.get("actor_conditioning", LEVEL)))
         return V1ComposedVecEnv(envs)
     except BaseException:
         if envs:
@@ -229,6 +233,7 @@ def make_model(env, settings, seed, method, *, resume=None):
     with torch.device('cpu'):
         if resume:
             require_checkpoint_control_compatibility(resume)
+            require_checkpoint_conditioning(resume, env.get_attr('actor_conditioning')[0])
             model = CPUTrainingPPO.load(resume, env=env, device='cpu')
             if model.policy.features_extractor.use_tactile != use_touch:
                 raise ValueError(f'{resume} was trained with a different tactile input than {method}')
@@ -251,6 +256,7 @@ def make_model(env, settings, seed, method, *, resume=None):
                     model.policy.log_std[:, k] = math.log(std)
     if model.n_steps*env.num_envs % model.batch_size:
         raise ValueError('Rollout size must divide into complete minibatches')
+    model.actor_conditioning = env.get_attr("actor_conditioning")[0]
     model.control_protocol = current_control_protocol()
     model.v1_config = asdict(env.get_attr('config')[0])
     model.action_joints = env.get_attr('action_joints')[0].tolist()
@@ -284,7 +290,7 @@ def run(args, experiment):
             tactile_model=current_tactile_model(), source_sha256=source_snapshot(output),
             input_checkpoint=str(args.resume.resolve()) if args.resume else None,
             input_checkpoint_sha256=sha256(args.resume) if args.resume else None,
-            conditioning='No object identity, material ground truth, F_break or object pose in actor inputs')
+            conditioning=conditioning_protocol(experiment.get('actor_conditioning', LEVEL)))
         write_json(output/'manifest.json', manifest)
         write_json(output/'status.json', {'status': 'initializing'})
         configure_seed(args.seed)
@@ -366,8 +372,13 @@ def dry_run(experiment):
     report['rollout'] = dict(total_lanes=lanes, samples=lanes*t['n_steps'],
                              duration_per_lane_s=t['n_steps']/V1_RATES.action_hz,
                              divisible_by_batch=lanes*t['n_steps'] % t['batch_size'] == 0)
+    report['actor_conditioning'] = conditioning_protocol(experiment.get('actor_conditioning', LEVEL))
     report['control_protocol'] = current_control_protocol()
     report['control_protocol_migration'] = experiment.get('control_protocol_migration')
+    report['config'] = asdict(V1Config(**experiment.get('config', {})))
+    report['samplers_by_stage'] = {stage['name']: asdict(SamplerConfig(
+        **{**experiment.get('sampler', {}), 'levels': tuple(stage['levels'])}))
+        for stage in experiment.get('stages', [])}
     print(json.dumps(report, indent=2))
 
 

@@ -28,7 +28,7 @@ from scipy.spatial.transform import Rotation, Slerp
 from environment import Sandbox
 from build_assets import HAND_JOINTS, ARM_JOINTS
 from contact_guard import assess_contacts
-from residual_rl.v1_task import (BASE_MOTION, HAND_SHAPES, V1Config, hand_shape_joints, link_region,
+from residual_rl.v1_task import (BASE_MOTION, HAND_SHAPES, V1Config, SUCCESS_RULE, hand_shape_joints, link_region,
                                  opposing_support, scaled_object, score_lift)
 
 VIEWS = ('scene_front', 'scene_left', 'wrist')
@@ -289,7 +289,7 @@ class SpecDemo:
                 bool(opposing_support(object_normals(e)[None], CONTACT_N)[0]), False))
         outcome = score_lift(samples, self.sim.control_dt_s, V1Config())
         score = {'success': bool(outcome['reason'] == 'success' and len(hold) == 180 and not self.failed),
-                 'v1_outcome': outcome['reason'], 'max_slip_m': outcome['slip_m'],
+                 'v1_outcome': outcome['reason'], 'max_slip_m': outcome['slip_m'], 'success_rule': SUCCESS_RULE,
                  'longest_stable_s': outcome['longest_stable_s'], 'full_hold': len(hold) == 180,
                  'fault': self.failed, 'control_steps': len(self.evals), 'hand_shape': self.hand_shape,
                  'hold_min_bottom_clearance_m': min((e['bottom_clearance_m'] for e in hold), default=None)}

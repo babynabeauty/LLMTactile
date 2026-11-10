@@ -5,7 +5,7 @@ import unittest
 
 import numpy as np
 
-from .v1_bases import SCHEMA, experiment_action_joints, load_experiment, load_library, sha256
+from .v1_bases import SCHEMA, experiment_action_joints, load_experiment, load_library, sha256, write_experiment
 
 PHASE_SECONDS = (('settle', .5), ('approach', 1.), ('align', .5), ('close', .5), ('preload', .25),
                  ('test_lift', .5), ('lift', 1.), ('hold', 3.))
@@ -97,6 +97,22 @@ class BaseLibraryTest(unittest.TestCase):
         data, (base,) = load_library(loaded['objects'][0]['base_library'])
         self.assertEqual(data['object_id'], 'cuboid')
         np.testing.assert_allclose(base.object_position, [-.6, -.1333, .2225])
+
+    def test_experiment_preserves_label_physics_and_rejects_mixed_protocols(self):
+        trajectory = write_trajectory(self.folder/'control.jsonl')
+        library = write_library(self.folder, trajectory)
+        old = self.folder/'old_library.json'
+        old.write_text(library.read_text())
+        data = json.loads(library.read_text())
+        data.update(finger_armature_kg_m2=.003, success_rule='lift_clearance_hold_v2')
+        library.write_text(json.dumps(data))
+        out = self.folder/'experiment.json'
+        write_experiment(out, [library])
+        experiment = load_experiment(out)
+        self.assertEqual(experiment['finger_armature_kg_m2'], .003)
+        self.assertEqual(experiment['success_rule'], 'lift_clearance_hold_v2')
+        with self.assertRaisesRegex(ValueError, 'different armature/success'):
+            write_experiment(out, [library, old])
 
 
 if __name__ == '__main__':

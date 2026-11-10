@@ -141,9 +141,10 @@ STAGES = [dict(name='stage1', levels=[4], requested_timesteps=2621440),
 
 def write_experiment(path, libraries, *, lanes_per_object=4, hand_shapes=None, name='v1'):
     """One scene per library (object x hand shape); stage1 is T1 only, stage2 adds T2 and resumes stage1."""
-    objects, shapes = [], set()
+    objects, shapes, protocols = [], set(), []
     for library in libraries:
         data = json.loads(Path(library).read_text())
+        protocols.append({key: data[key] for key in ('finger_armature_kg_m2', 'success_rule') if key in data})
         shapes.add(data['hand_shape'])
         objects.append(dict(object_id=f"{data['object_id']}_{data['hand_shape']}",
                             base_library=str(Path(library).resolve())))
@@ -151,6 +152,10 @@ def write_experiment(path, libraries, *, lanes_per_object=4, hand_shapes=None, n
         hand_shapes=sorted(hand_shapes or shapes), config={}, sampler={}, joint_friction_Nm=[0., 0.],
         tactile_noise_N=0., training=TRAINING_DEFAULTS, stages=STAGES,
         control_protocol=current_control_protocol())
+    if protocols:
+        if any(protocol != protocols[0] for protocol in protocols):
+            raise ValueError('Base libraries have different armature/success protocols; relabel consistently')
+        experiment.update(protocols[0])
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(json.dumps(experiment, indent=2))
     return Path(path)

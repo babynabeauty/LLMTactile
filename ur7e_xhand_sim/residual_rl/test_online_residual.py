@@ -176,20 +176,23 @@ class OnlineScoreTest(unittest.TestCase):
             path.write_text('\n'.join(json.dumps(r) for r in controls))
             return strict_online_metrics(path, evaluations, 1/60, V1Config())
 
-    def test_strict_score_distinguishes_clearance_from_slip_and_support(self):
+    def test_score_requires_lift_hold_without_drop_or_fault(self):
         good = self.score_case()
         self.assertTrue(good['strict_success'])
+        self.assertEqual(good['stable_hold_s'], 3.)
+        self.assertEqual(good['stable_shift_m'], .005)
         self.assertTrue(good['fragility_not_simulated'])
-        # A slip followed by a still two seconds succeeds; slip is only penalized in training.
+        # Slip before the hold interval does not prevent three seconds of subsequent stability.
         slipped = self.score_case(slip=.006)
         self.assertTrue(slipped['strict_success'])
         self.assertAlmostEqual(slipped['slip_distance_m'], .006)
         self.assertEqual(self.score_case(slip=.04)['termination_reason'], 'dropped')
-        unstable = self.score_case(jump_every=60)
-        self.assertEqual(unstable['termination_reason'], 'unstable')
-        self.assertLess(unstable['longest_stable_s'], 1)
+        drifting = self.score_case(jump_every=60)
+        self.assertEqual(drifting['termination_reason'], 'unstable')
+        self.assertLess(drifting['longest_stable_s'], 3.)
         unsupported = self.score_case(support=False)
-        self.assertEqual(unsupported['termination_reason'], 'no_opposing_support')
+        self.assertEqual(unsupported['termination_reason'], 'success')
+        self.assertEqual(unsupported['success_rule'], 'lift_position_hold_v3')
         fault = self.score_case(contact_fault=True)
         self.assertFalse(fault['strict_success'])
 

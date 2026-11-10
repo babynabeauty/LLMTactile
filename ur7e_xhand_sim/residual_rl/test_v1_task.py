@@ -127,31 +127,49 @@ class BreakAndSlipTest(unittest.TestCase):
         np.testing.assert_allclose(shift, [.005, 0])
         np.testing.assert_allclose(angle, [0, 30], atol=1e-6)
 
-    def test_stable_hold_needs_two_still_seconds_after_lift(self):
-        cfg, tracker, dt = V1Config(), StableHold(1), 1/60
-
-        def sample(k, clearance=.05, x=0., support=True):
-            return tracker.update(np.array([k*dt]), np.array([clearance]), np.array([[x, 0, 0]]),
-                                  np.eye(3)[None], np.array([support]), np.array([True]), cfg)[0]
-        self.assertFalse(any(sample(k, clearance=.01) for k in range(60)))       # below 2 cm
-        self.assertFalse(tracker.lifted[0])
-        self.assertFalse(any(sample(k, support=False) for k in range(60, 120)))  # no opposing support
-        self.assertTrue(tracker.lifted[0] and not tracker.supported[0])
-        # 3 mm jumps every second keep restarting the interval.
-        self.assertFalse(any(sample(k, x=.003*(k//60)) for k in range(120, 300)))
-        self.assertAlmostEqual(tracker.longest[0], 59/60)
-        # Still from k = 300: two seconds later the hold is complete.
-        self.assertFalse(any(sample(k, x=.009) for k in range(300, 420)))
-        self.assertTrue(sample(420, x=.009))
+    def test_lift_hold_accepts_exact_5mm_and_ignores_opposing_support(self):
+        cfg, tracker = V1Config(), StableHold(1)
+        self.assertEqual((cfg.stable_hold_s, cfg.stable_shift_m), (3., .005))
+        for k in range(181):
+            # A 3-4-5 triangle checks Euclidean displacement, at the inclusive boundary.
+            position = np.zeros((1, 3)) if k == 0 else np.array([[.003, .004, 0.]])
+            success = tracker.update(np.array([k/60]), np.array([.02]), position,
+                np.eye(3)[None], np.array([False]), np.array([True]), cfg)[0]
+            self.assertEqual(bool(success), k == 180)
+        self.assertTrue(tracker.lifted[0])
+        self.assertFalse(tracker.supported[0])
+        self.assertAlmostEqual(tracker.longest[0], 3.)
         tracker.reset([0])
+        self.assertTrue(np.isnan(tracker.start[0]))
         self.assertFalse(tracker.lifted[0] or tracker.longest[0])
 
-    def test_stable_hold_restarts_on_rotation(self):
+    def test_lift_hold_restarts_from_current_position_when_over_5mm(self):
         cfg, tracker = V1Config(), StableHold(1)
-        for k in range(200):
-            self.assertFalse(tracker.update(np.array([k/60]), np.array([.05]), np.zeros((1, 3)),
-                turn_z(k*.2)[None], np.array([True]), np.array([True]), cfg)[0])   # 12 deg/s keeps turning
-        self.assertLess(tracker.longest[0], 1)
+        for k in range(301):
+            # Neither per-step displacement nor a moving reference: total drift exceeds 5 mm at 120.
+            x = 0. if k < 60 else .003 if k < 120 else .0051
+            success = tracker.update(np.array([k/60]), np.array([.02]), np.array([[x, 0, 0]]),
+                np.eye(3)[None], np.array([True]), np.array([True]), cfg)[0]
+            self.assertEqual(bool(success), k == 300)
+            if k == 120:
+                self.assertEqual(tracker.start[0], 2.)
+                self.assertAlmostEqual(tracker.position[0, 0], .0051)
+
+    def test_lift_hold_ignores_rotation(self):
+        cfg, tracker = V1Config(), StableHold(1)
+        for k in range(181):
+            success = tracker.update(np.array([k/60]), np.array([.05]), np.zeros((1, 3)),
+                turn_z(k*.2)[None], np.array([True]), np.array([True]), cfg)[0]
+            self.assertEqual(bool(success), k == 180)  # 36 degrees of rotation still qualifies.
+
+    def test_lift_hold_restarts_below_clearance_and_excludes_failed_lanes(self):
+        cfg, tracker = V1Config(), StableHold(2)
+        for k in range(242):
+            clearance = np.array([.0199 if k == 60 else .02, .02])
+            success = tracker.update(np.full(2, k/60), clearance, np.zeros((2, 3)),
+                np.tile(np.eye(3), (2, 1, 1)), np.zeros(2, bool), np.array([True, False]), cfg)
+            self.assertEqual(bool(success[0]), k == 241)
+            self.assertFalse(success[1])
 
     def test_score_lift_decides_like_the_environment(self):
         cfg, dt = V1Config(), 1/60
@@ -159,15 +177,22 @@ class BreakAndSlipTest(unittest.TestCase):
         def run(x, clearance=lambda k: .05, fault=lambda k: False):
             return score_lift([(np.array([x(k), 0, 0]), np.eye(3), clearance(k), True, fault(k)) for k in range(300)],
                               dt, cfg)
-        # 1 cm of slip while lifting, then held still: success two seconds after the slip stops.
+        # 1 cm of slip while lifting: success three seconds after reaching 2 cm clearance.
         slipped = run(lambda k: min(k, 30)/3000, clearance=lambda k: min(k, 30)/1000)
-        self.assertEqual((slipped['reason'], slipped['decided_at']), ('success', 147))
+        self.assertEqual((slipped['reason'], slipped['decided_at']), ('success', 200))
         self.assertAlmostEqual(slipped['slip_m'], .01)
         self.assertEqual(run(lambda k: .04*(k >= 10))['reason'], 'dropped')
         self.assertEqual(run(lambda k: 0., fault=lambda k: k == 5)['decided_at'], 5)
         self.assertEqual(run(lambda k: 0., clearance=lambda k: 0.)['reason'], 'not_lifted')
-        unstable = run(lambda k: .003*(k//60))
-        self.assertEqual((unstable['reason'], unstable['decided_at']), ('unstable', None))
+        drifting = run(lambda k: .003*(k//60))
+        self.assertEqual((drifting['reason'], drifting['decided_at']), ('unstable', None))
+        self.assertEqual(drifting['success_rule'], 'lift_position_hold_v3')
+        interrupted = run(lambda k: 0., clearance=lambda k: .01 if k % 60 == 0 else .02)
+        self.assertEqual((interrupted['reason'], interrupted['decided_at']), ('unstable', None))
+        self.assertLess(interrupted['longest_stable_s'], 1.)
+        # Failure wins even on the exact sample that would complete the hold.
+        self.assertEqual(run(lambda k: 0., fault=lambda k: k == 180)['reason'], 'collision')
+        self.assertEqual(run(lambda k: .04*(k >= 180))['reason'], 'dropped')
 
     def test_stable_hold_must_be_positive(self):
         with self.assertRaises(ValueError):

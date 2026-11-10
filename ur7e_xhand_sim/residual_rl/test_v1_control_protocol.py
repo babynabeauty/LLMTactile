@@ -83,6 +83,7 @@ class V1ControlProtocolTest(unittest.TestCase):
         class ActorEnv(gym.Env):
             def __init__(self):
                 self.config = V1Config()
+                self.actor_conditioning = "astra_level_one_hot_v1"
                 self.action_joints = np.arange(6)
                 self.action_space = gym.spaces.Box(-1., 1., (6,), np.float32)
                 self.observation_space = gym.spaces.Dict({

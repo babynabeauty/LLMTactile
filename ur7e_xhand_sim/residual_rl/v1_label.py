@@ -14,7 +14,7 @@ from pathlib import Path
 import numpy as np
 
 from .v1_bases import SCHEMA, Base, write_experiment
-from .v1_task import FINGER_JOINTS, HAND_SHAPES, YAW_PERIOD_DEG, SamplerConfig, V1Config, hand_shape_joints, wrap_yaw
+from .v1_task import FINGER_JOINTS, HAND_SHAPES, YAW_PERIOD_DEG, SUCCESS_RULE, SamplerConfig, V1Config, hand_shape_joints, wrap_yaw
 from .control_protocol import current_control_protocol
 
 GRID = (-.15, -.075, 0., .075, .15)
@@ -76,7 +76,7 @@ def run_specs(env, specs, act):
     return {r['spec_index']: r for r in results}
 
 
-def label_group(runs, demo, output, lanes, seed):
+def label_group(runs, demo, output, lanes, seed, *, finger_armature=None):
     from .v1_env import V1VecEnv
     checks = {r['run_id']: record_check(r, demo) for r in runs}
     usable = [r for r in runs if checks[r['run_id']]['usable']]
@@ -91,7 +91,7 @@ def label_group(runs, demo, output, lanes, seed):
     joints = hand_shape_joints(shape)
     env = V1VecEnv(runs[0]['object_spec'], bases, n_envs=lanes, seed=seed, output_dir=output/'label_env',
                    object_id=runs[0]['object_id'], hand_shape=shape, action_joints=joints,
-                   config=V1Config(), sampler=SamplerConfig(levels=(4,)))
+                   config=V1Config(), sampler=SamplerConfig(levels=(4,)), finger_armature=finger_armature)
     try:
         for b in env.excluded_bases:
             labels[b['base_id']].update(usable=False, reason='contact before close in replay')
@@ -146,18 +146,35 @@ def main(argv=None):
     p.add_argument('--lanes', type=int, default=16)
     p.add_argument('--lanes-per-object', type=int, default=4, help='training lanes per scene')
     p.add_argument('--seed', type=int, default=1)
+    p.add_argument('--split', choices=('all', 'train', 'test'), default='all',
+                   help='Only label the selected placement split')
+    p.add_argument('--finger-armature', type=float, default=None,
+                   help='Override all twelve finger DOFs in kg m²; leave arm DOFs unchanged')
     args = p.parse_args(argv)
+    if args.finger_armature is not None and (not np.isfinite(args.finger_armature) or args.finger_armature < 0):
+        p.error('--finger-armature must be finite and nonnegative')
+    runs = [json.loads(line) for line in (args.collection/'runs.jsonl').open()]
+    if args.split != 'all':
+        runs = [r for r in runs if r['split'] == args.split]
+    if not runs:
+        p.error('No collection runs for the selected split')
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=False)
     (output/'control_protocol.json').write_text(json.dumps(current_control_protocol(), indent=2))
-    runs = [json.loads(line) for line in (args.collection/'runs.jsonl').open()]
+    (output/'label_protocol.json').write_text(json.dumps(dict(
+        collection=str(args.collection.resolve()), split=args.split, seed=args.seed,
+        finger_armature_kg_m2=args.finger_armature, success_rule=SUCCESS_RULE,
+        mass_kg=COLLECTION['mass_kg'], friction=COLLECTION['friction'], level=4,
+        unbreakable=True), indent=2))
     groups = {}
     for r in runs:
         groups.setdefault((r['object_id'], r['hand_shape']), []).append(r)
     report, train_libraries, test_libraries = {}, [], []
     for (object_id, shape), group in sorted(groups.items()):
         demo = json.loads(Path(group[0]['demo']).read_text())
-        labels = label_group(group, demo, output/f'{object_id}_{shape}', args.lanes, args.seed)
+        print(f'Labeling {object_id}_{shape}: {len(group)} runs', flush=True)
+        labels = label_group(group, demo, output/f'{object_id}_{shape}', args.lanes, args.seed,
+                             finger_armature=args.finger_armature)
         report[f'{object_id}_{shape}'] = labels
         for split, libraries in (('train', train_libraries), ('test', test_libraries)):
             keep = ('S', 'R') if split == 'train' else ('S', 'R', 'U')
@@ -171,7 +188,8 @@ def main(argv=None):
             if bases:
                 path = output/f'{object_id}_{shape}_{split}.json'
                 path.write_text(json.dumps(dict(schema=SCHEMA, object_id=object_id, object_spec=group[0]['object_spec'],
-                    hand_shape=shape, source=str(args.collection.resolve()), bases=bases), indent=2))
+                    hand_shape=shape, source=str(args.collection.resolve()), bases=bases,
+                    finger_armature_kg_m2=args.finger_armature, success_rule=SUCCESS_RULE), indent=2))
                 libraries.append(path)
     (output/'labels.json').write_text(json.dumps(report, indent=2))
     counts = {g: {k: sum(v.get('label') == k for v in labels.values()) for k in ('S', 'R', 'U')} |
@@ -183,8 +201,9 @@ def main(argv=None):
     if train_libraries:
         write_experiment(output/'experiment_train.json', train_libraries,
                          lanes_per_object=args.lanes_per_object, name='v1_train')
+    if test_libraries:
         write_experiment(output/'experiment_test.json', test_libraries,
-                         lanes_per_object=args.lanes_per_object, hand_shapes=shapes, name='v1_test')
+                         lanes_per_object=args.lanes_per_object, hand_shapes=shapes or None, name='v1_test')
     print(json.dumps(counts, indent=2))
 
 

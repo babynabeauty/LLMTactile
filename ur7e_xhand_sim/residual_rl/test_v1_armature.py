@@ -1,6 +1,7 @@
 """CPU checks for an opt-in override; no scene creation or physics."""
 from types import SimpleNamespace
 import unittest
+from unittest.mock import patch
 
 import numpy as np
 
@@ -62,6 +63,22 @@ class ArmatureDiagnosticTest(unittest.TestCase):
         env.robot.set_dofs_armature = lambda values, indices: None
         with self.assertRaisesRegex(AssertionError, 'readback differs'):
             V1VecEnv._configure_finger_armature(env)
+
+    def test_environment_builder_uses_recorded_armature_and_allows_diagnostic_override(self):
+        from . import v1_env, v1_train
+        experiment = dict(objects=[dict(object_id='cuboid_pinch', base_library='unused.json')],
+                          lanes_per_object=2, finger_armature_kg_m2=.003)
+        with patch.object(v1_train, 'load_library', return_value=(
+                dict(hand_shape='pinch', object_spec={'shape': 'cuboid'}), [])), \
+             patch.object(v1_env, 'V1VecEnv') as constructor, \
+             patch.object(v1_env, 'V1ComposedVecEnv'):
+            for value, expected in ((None, .003), (.01, .01)):
+                v1_train.build_environment(experiment, {'levels': [4]}, 'unused',
+                    seed=1, method='tactile', finger_armature=value)
+                self.assertEqual(constructor.call_args.kwargs['finger_armature'], expected)
+            del experiment['finger_armature_kg_m2']
+            v1_train.build_environment(experiment, {'levels': [4]}, 'unused', seed=1, method='tactile')
+            self.assertIsNone(constructor.call_args.kwargs['finger_armature'])
 
 
 if __name__ == '__main__':

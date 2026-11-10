@@ -13,6 +13,7 @@ from pathlib import Path
 
 import numpy as np
 
+from .v1_conditioning import LEVEL, conditioning_protocol, require_checkpoint_conditioning
 from .v1_bases import load_experiment, sha256
 from .control_protocol import current_control_protocol, require_checkpoint_control_compatibility
 from .tactile_provenance import require_checkpoint_tactile_compatibility
@@ -93,7 +94,7 @@ def print_grid(controllers):
 
 def assign_specs(env, materials, levels, seed):
     for i, child in enumerate(env.envs):
-        specs = episode_specs(range(len(child.bases)), materials, levels, seed*1000+i)
+        specs = episode_specs(range(len(child.bases)), materials, levels, seed*1000+i, child.sampler)
         for s in specs:
             s['base_id'] = child.bases[s.pop('base_index')].base_id
         child.set_episode_specs(specs)
@@ -121,12 +122,14 @@ def main(argv=None):
     args = p.parse_args(argv)
     experiment = load_experiment(args.experiment_json)
     require_checkpoint_control_compatibility(args.checkpoint)
+    require_checkpoint_conditioning(args.checkpoint, experiment.get("actor_conditioning", LEVEL))
     require_checkpoint_tactile_compatibility(args.checkpoint)
     args.output.mkdir(parents=True, exist_ok=False)
     env = build_environment(experiment, {'levels': args.levels}, args.output, seed=args.seed, method=args.method,
         lanes=args.lanes, fixed_gain=args.fixed_gains[0] if args.fixed_gains else None,
         split=args.split, labels=tuple(args.labels))
-    summary = dict(experiment_sha256=sha256(args.experiment_json), split=args.split, labels=args.labels,
+    summary = dict(actor_conditioning=conditioning_protocol(experiment.get("actor_conditioning", LEVEL)),
+                   experiment_sha256=sha256(args.experiment_json), split=args.split, labels=args.labels,
                    control_protocol=current_control_protocol(),
                    materials=args.materials, levels=args.levels, seed=args.seed)
     try:

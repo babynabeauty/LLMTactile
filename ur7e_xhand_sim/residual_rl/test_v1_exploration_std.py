@@ -20,6 +20,7 @@ from .v1_train import dry_run, make_model
 class ActorEnv(gym.Env):
     def __init__(self, joints):
         self.config = V1Config()
+        self.actor_conditioning = 'astra_level_one_hot_v1'
         self.action_joints = np.asarray(joints)
         self.action_space = gym.spaces.Box(-1., 1., (len(joints),), np.float32)
         self.observation_space = gym.spaces.Dict({
