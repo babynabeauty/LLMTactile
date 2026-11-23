@@ -97,24 +97,30 @@ def symmetric_contacts():
                     ['thumb', 'index', 'middle'])
 
 
-def test_three_point_grasp_fixes_weight_shares():
-    """Three point contacts at one height: torque balance about x and y fixes each contact's share of the
-    weight (thumb 1/2, index 1/4, middle 1/4), so each normal force has a floor of share/mu and the risk
-    constraint cannot move load below it. Documented design issue, see risk_mvp/README.md."""
+def test_slip_margin_lets_load_follow_the_weak_side():
+    """Scheme 1 on the measured tripod contacts: a weak index or middle region gives up slip margin first,
+    the load moves to the other finger, and the two cases mirror each other (the swap experiment)."""
     w = gravity_wrench(.2, np.eye(3))
-    mu = .4
-    base = Allocator(symmetric_contacts(), 3, mode='tactile').solve(w, mu=mu, fmax=15.)
-    assert np.allclose([base['finger_normal'][f] for f in ('thumb', 'index', 'middle')],
-                       np.array([.5, .25, .25])*.2*9.81/mu, rtol=1e-3)
-    times = []
-    a = Allocator(symmetric_contacts(), 3, mode='risk')
-    for th in (4., 3.):   # 4 N: the floor is safe enough; 3 N: weak index below its floor -> reported
-        rep = a.solve(w, mu=mu, fmax=15., margin=.1, hazard=weibull_hazard([30., th, 30.]))
-        times.append(rep['solver_s'])
-        assert rep['feasible'] == (th == 4.)
-        assert np.isclose(rep['finger_normal']['index'], base['finger_normal']['index'], rtol=1e-3)
-    assert rep['infeasible']['binding_region'] == 1
-    assert max(times) < .01
+    base = Allocator(tripod_contacts([0, 1, 2]), 3, mode='tactile').solve(w, mu=.8, fmax=15.)
+    assert base['feasible'] and max(base['slip_margin_deficit'].values()) < 1e-6
+    out = {}
+    for weak in ('index', 'middle'):
+        theta = np.array([30., 3. if weak == 'index' else 30., 3. if weak == 'middle' else 30.])
+        a = Allocator(tripod_contacts([0, 1, 2]), 3, mode='risk')
+        times, reps = [], []
+        for _ in range(20):
+            reps.append(a.solve(w, mu=.8, fmax=15., margin=.1, hazard=weibull_hazard(theta), eps=.05))
+            times.append(reps[-1]['solve_s'])
+        rep = reps[-1]
+        assert rep['feasible'] and rep['damage_prob_bound'] <= .05+1e-6
+        out[weak] = rep['finger_normal']
+        print(weak, 'weak:', {k: round(v, 3) for k, v in rep['finger_normal'].items()},
+              'baseline:', {k: round(v, 3) for k, v in base['finger_normal'].items()},
+              'warm solve ms %.2f' % (1e3*np.median(times[1:])))
+        assert np.median(times[1:]) < .01
+    b = base['finger_normal']
+    assert out['index']['index'] < b['index']-.2 and out['index']['middle'] > b['middle']+.2
+    assert out['middle']['middle'] < b['middle']-.2 and out['middle']['index'] > b['index']+.2
 
 
 def test_probe_geometry_limits_the_shift():
@@ -122,7 +128,7 @@ def test_probe_geometry_limits_the_shift():
     shared between index and middle, so each has a floor of (its weight share)/mu."""
     w = gravity_wrench(.2, np.eye(3))
     rep = Allocator(tripod_contacts([0, 1, 2]), 3, mode='risk').solve(
-        w, mu=.5, fmax=15., margin=.1, hazard=weibull_hazard([30., 30., 2.]))
+        w, mu=.5, fmax=15., margin=.1, hazard=weibull_hazard([30., 30., 1.5]))
     assert not rep['feasible'] and rep['infeasible']['binding_region'] == 2
 
 

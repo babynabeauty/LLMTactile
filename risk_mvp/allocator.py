@@ -2,11 +2,16 @@
 
 Variables: a force vector f_i on the object at every contact i (object frame).
   (1) wrench balance        G f = -w_ext          (gravity + lift inertia, force & torque about COM)
-  (2) friction cone         ||f_i - (n_i.f_i) n_i|| <= mu (n_i.f_i)
+  (2) friction cone, hard   ||f_i - (n_i.f_i) n_i|| <= mu (n_i.f_i)            (mu: slip-limit estimate)
+  (2') slip margin, soft    ||f_i - (n_i.f_i) n_i|| <= (mu/s) (n_i.f_i) + m_i  (s: safety factor, m_i >= 0
+                            costs rho per N). Slip is observable and recoverable, damage is not, so a
+                            contact whose region is at risk gives up its margin before the damage budget
+                            is broken (scheme 1; with three point contacts the weight shares are fixed by
+                            statics, so the margin is the only freedom the allocator has).
   (3) damage budget         sum_r H_r(F_r + margin) <= -log(1 - eps),   F_r = sum_{i in r} n_i.f_i
       H_r: cumulative hazard on a force grid, convex increasing piecewise-linear -> max of affine pieces
   (4) actuator limit        n_i.f_i <= fmax_i     (joint-torque limit mapped to the fingertip)
-Objective: sum_i n_i.f_i + lam ||f - f_prev||^2.
+Objective: sum_i n_i.f_i + lam ||f - f_prev||^2 + rho sum_i m_i.
 
 (1) and (3) carry non-negative slacks with a large penalty, so the problem is always
 feasible; a positive slack is the structured "cannot hold safely" report.
@@ -58,7 +63,7 @@ class Contacts:
 class Allocator:
     def __init__(self, contacts: Contacts, n_regions: int, mode: str = 'risk', lam: float = 1.,
                  equal_group: Sequence[str] = ('index', 'middle'), slack_weight: float = 1e4,
-                 torque_scale_m: float = .02):
+                 torque_scale_m: float = .02, slip_weight: float = 10.):
         if mode not in ('risk', 'tactile', 'equal', 'cap', 'oracle'):
             raise ValueError(mode)
         self.c, self.K, self.mode = contacts, n_regions, mode
@@ -81,6 +86,8 @@ class Allocator:
         self.w = cp.Parameter(6)
         self.f_prev = cp.Parameter((n, 3))
         self.mu = cp.Parameter(nonneg=True)
+        self.mu_soft = cp.Parameter(nonneg=True)
+        self.slip_margin = cp.Variable(n, nonneg=True)
         self.fmax = cp.Parameter(n, nonneg=True)
         self.margin = cp.Parameter(nonneg=True)
         s_eq = cp.Variable(6)
@@ -88,8 +95,14 @@ class Allocator:
         for i in range(n):
             P = np.eye(3)-np.outer(N[i], N[i])
             cons.append(cp.norm(P@self.f[i]) <= self.mu*fn[i])
+            cons.append(cp.norm(P@self.f[i]) <= self.mu_soft*fn[i]+self.slip_margin[i])
         F = M@fn
-        obj = cp.sum(fn)+lam*cp.sum_squares(self.f-self.f_prev)+slack_weight*cp.norm1(s_eq)
+        # Two problems share variables and constraints: the first solve of a grasp has no previous force,
+        # so it drops the smoothing term (a parameter weight on it would not be DPP).
+        self.first = True
+        smooth = lam*cp.sum_squares(self.f-self.f_prev)
+        obj = (cp.sum(fn)+slip_weight*cp.sum(self.slip_margin)
+               +slack_weight*cp.norm1(s_eq))
         self.s_eq, self.s_risk = s_eq, None
         if mode == 'risk':
             S = len(GRID_N)-1
@@ -113,17 +126,21 @@ class Allocator:
             idx = [i for i, f in enumerate(contacts.finger) if f in equal_group]
             cons += [fn[idx[j]] == fn[idx[0]] for j in range(1, len(idx))]
         self.F = F
-        self.prob = cp.Problem(cp.Minimize(obj), cons)
+        self.prob_first = cp.Problem(cp.Minimize(obj), cons)
+        self.prob = cp.Problem(cp.Minimize(obj+smooth), cons)
         self.N = N
         self.f_prev.value = np.zeros((n, 3))
 
     def solve(self, w_ext: np.ndarray, mu: float, fmax, margin: float = 0., hazard: Optional[np.ndarray] = None,
-              eps: float = .05, limit: Optional[np.ndarray] = None, solver: str = 'CLARABEL') -> dict:
+              eps: float = .05, limit: Optional[np.ndarray] = None, safety: float = 2.,
+              solver: str = 'CLARABEL') -> dict:
+        """mu: slip-limit friction estimate (hard); safety: slip-margin factor s >= 1 (soft, mu/s)."""
         n = len(self.c.pos)
         w_ext = np.asarray(w_ext, float).copy()
         w_ext[3:] /= self.torque_scale_m
         self.w.value = w_ext
         self.mu.value = float(mu)
+        self.mu_soft.value = float(mu)/max(float(safety), 1.)
         self.fmax.value = np.broadcast_to(np.asarray(fmax, float), (n,)).copy()
         self.margin.value = float(margin)
         if self.mode == 'risk':
@@ -134,18 +151,21 @@ class Allocator:
         elif self.mode in ('cap', 'oracle'):
             self.limit.value = np.broadcast_to(np.asarray(limit, float), (self.K,)).copy()
         t0 = time.perf_counter()
-        self.prob.solve(solver=solver)
+        prob = self.prob_first if self.first else self.prob
+        self.first = False
+        prob.solve(solver=solver)
         dt = time.perf_counter()-t0
         f = self.f.value
         self.f_prev.value = f
         fn = (f*self.N).sum(1)
         F = np.zeros(self.K)
         np.add.at(F, self.c.region, fn)
-        report = dict(status=self.prob.status, solve_s=dt, solver_s=self.prob.solver_stats.solve_time,
+        report = dict(status=prob.status, solve_s=dt, solver_s=prob.solver_stats.solve_time,
                       f=f, fn=fn, region_force=F, finger_normal={g: float(fn[i]) for i, g in enumerate(self.c.finger)})
         eq_slack = float(np.abs(self.s_eq.value).sum())
         risk_slack = 0. if self.s_risk is None else float(np.sum(self.s_risk.value))
-        report.update(eq_slack=eq_slack, risk_slack=risk_slack, feasible=eq_slack < 1e-4 and risk_slack < 1e-5)
+        report.update(eq_slack=eq_slack, risk_slack=risk_slack, feasible=eq_slack < 1e-4 and risk_slack < 1e-5,
+                      slip_margin_deficit={g: float(self.slip_margin.value[i]) for i, g in enumerate(self.c.finger)})
         if self.mode == 'risk':
             report['region_hazard'] = self.t.value.copy()
             report['damage_prob_bound'] = float(1-np.exp(-self.t.value.sum()))
