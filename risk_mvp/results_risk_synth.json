@@ -1,0 +1,44 @@
+{
+ "config": {
+  "data": "synthetic",
+  "out": "/tmp/claude-0/-home-user-llmtactile/54e39b24-ec4e-5855-9935-b8e3bf7e22ed/scratchpad/rs",
+  "train_instances": "1500",
+  "val_instances": "200",
+  "epochs": "8",
+  "model": {
+   "text_dim": 32,
+   "d_model": 128,
+   "n_heads": 4,
+   "n_layers": 2,
+   "dropout": 0.1,
+   "max_archive": 10
+  }
+ },
+ "checks": {
+  "a_censored_vs_open_book": {
+   "censored_median_abs_log_err": 0.20949341356754303,
+   "open_book_median_abs_log_err": 0.20550549030303955
+  },
+  "b_error_vs_archive_size": {
+   "0": 0.7061679363250732,
+   "1": 0.3529813587665558,
+   "2": 0.2681204676628113,
+   "4": 0.2072669118642807,
+   "6": 0.17340895533561707,
+   "8": 0.16864986717700958,
+   "10": 0.16932889819145203
+  },
+  "c_vlm_label_dependence": {
+   "wrong_vlm_archive0": 0.020437605679035187,
+   "wrong_vlm_archive10": 0.01141168363392353,
+   "right_vlm_archive10": 0.01067402120679617,
+   "wrong_vlm_err_archive0": 0.7635752558708191,
+   "wrong_vlm_err_archive10": 0.17519377171993256
+  }
+ },
+ "pass": {
+  "a": true,
+  "b": true,
+  "c": true
+ }
+}
