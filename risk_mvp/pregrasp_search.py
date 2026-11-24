@@ -267,6 +267,16 @@ def main():
     ids = a.objects or list(O.CATALOG)
     summary_path = a.out/'summary.json'
     summary = json.loads(summary_path.read_text()) if summary_path.exists() else {}
+    import subprocess
+    try:
+        commit = subprocess.run(['git', 'rev-parse', '--short', 'HEAD'], cwd=ROOT, capture_output=True,
+                                text=True).stdout.strip()
+    except OSError:
+        commit = None
+    # which code and which command produced this file (earlier objects in the same --out are kept)
+    summary.setdefault('_runs', []).append(dict(commit=commit, argv=sys.argv[1:], objects=ids,
+                                                time=time.strftime('%Y-%m-%d %H:%M:%S')))
+    print(f'pregrasp_search {commit}: {len(ids)} objects -> {a.out}', flush=True)
     held = []
     for oid in ids:
         try:
