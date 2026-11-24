@@ -6,6 +6,11 @@ finger (threshold drawn in --weak-range N), every other region is strong (--stro
   equal    index and middle forced equal (risk-blind)
   tactile  minimal forces with the slip margin, no damage constraint (TacDexGrasp-style, risk-blind)
   oracle   knows the true thresholds (upper reference)
+The weak threshold is drawn per side between the oracle floor (lowest threshold the oracle allocation can
+respect on this snapshot) and the equal split, so equal should break and oracle should not; a side whose
+floor is not below the equal split has no room and gets thresholds around the equal split (has_room false).
+A fixed absolute range (first run: 1.2-1.6 N) sat above 065-a's equal split (0.98 N): nothing broke and the
+oracle constraint never became active.
 Default object 065-a_cups: its thumb sits between index and middle, so both sides leave room to move
 load. On a grasp where the thumb faces one finger (e.g. 065-d) that finger carries most of the weight
 share and the window on its side nearly vanishes (CPU check with the search contacts, 0.15 kg, mu-hat
@@ -48,7 +53,10 @@ def main():
     ap.add_argument('--mu', type=float, default=.6, help='true contact friction')
     ap.add_argument('--mu-hat', type=float, default=.5, help="allocator's friction estimate")
     ap.add_argument('--safety', type=float, default=2.)
-    ap.add_argument('--weak-range', type=float, nargs=2, default=[1.2, 1.6])
+    ap.add_argument('--weak-range', type=float, nargs=2, default=None,
+                    help='fixed weak threshold range N for both sides; default: per side from the snapshot window')
+    ap.add_argument('--window-frac', type=float, nargs=2, default=[.3, .8],
+                    help='auto range: floor + frac x (equal - floor), floor = lowest threshold the oracle can respect')
     ap.add_argument('--strong-range', type=float, nargs=2, default=[4., 8.])
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--backend', default='gpu')
@@ -65,13 +73,34 @@ def main():
     part = partition(object_mesh(O.region_spec(a.object)), snap['k_regions'], seed=snap['partition_seed'],
                      separate=snap['partition_separate'])
     region_of = {f: snap['contacts'][f]['region'] for f in FINGERS}
+    # the swap window the episode allocator sees: equal-split force and, per side, the lowest weak
+    # threshold the oracle can still respect (snapshot contacts, normals and pose; this run's mass/mu/safety)
+    from risk_mvp.episode import safe_normal
+    from risk_mvp.scene import quat_to_mat
+    from risk_mvp.snapshot import swap_window
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety)
+    pts = {f: np.array(snap['contacts'][f]['point_obj']) for f in FINGERS}
+    nrms = {f: safe_normal(np.array(snap['contacts'][f]['normal_obj'], float), pts[f]) for f in FINGERS}
+    eqf, wi, wm = swap_window(pts, nrms, quat_to_mat(snap['obj_quat']), mass=a.mass, mu=a.mu_hat, safety=a.safety,
+                              margin=cfg.margin_N, mass_margin=cfg.mass_margin)
+    window = dict(equal_N=float(eqf), floor_N=dict(index=float(wi), middle=float(wm)), weak_range_N={}, has_room={})
+    for s, w in (('index', wi), ('middle', wm)):
+        if a.weak_range is not None:
+            lo, hi = a.weak_range
+        elif eqf - w > .1:
+            lo, hi = (w + fr*(eqf - w) for fr in a.window_frac)
+        else:                        # geometry leaves no room on this side: thresholds around the equal split
+            lo, hi = .9*eqf, 1.1*eqf
+        window['weak_range_N'][s] = [float(lo), float(hi)]
+        window['has_room'][s] = bool(eqf - w > .1)
+    print('swap window', json.dumps(window), flush=True)
     rng = np.random.default_rng(a.seed)
     cells = [(m, s) for m in METHODS for s in SIDES]
     modes, sides, thr = [], [], []
     for m, s in cells:
         for _ in range(a.per_cell):
             t = rng.uniform(*a.strong_range, part.k)
-            t[region_of[s]] = rng.uniform(*a.weak_range)
+            t[region_of[s]] = rng.uniform(*window['weak_range_N'][s])
             modes.append(m)
             sides.append(s)
             thr.append(t)
@@ -80,12 +109,11 @@ def main():
     sc = GraspScene(a.object, E, backend=a.backend, mass_kg=a.mass)
     sc.set_mass(a.mass)
     sc.set_friction(a.mu)
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety)
     res = run_trial(sc, snap, part, modes, thr, cfg, mass_kg=a.mass)
     hold = np.array(res.log['phase']) == 'hold'
     fn_hold = res.log['fn'][hold].mean(0)                     # (E, 3)
     out = dict(config={k: (str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()},
-               regions=region_of, cells={})
+               regions=region_of, window=window, cells={})
     for m, s in cells:
         idx = [e for e in range(E) if modes[e] == m and sides[e] == s]
         out['cells'][f'{m}/{s}'] = dict(
@@ -112,6 +140,9 @@ def main():
             ax.plot([0, 1], ys, 'o-', color=col, label=f'{f} force')
         wt = [out['cells'][f'{m}/{s}']['weak_threshold_N'] for s in SIDES]
         ax.plot([0, 1], wt, 'k:', label='weak threshold (mean)')
+        ax.plot([0, 1], [window['floor_N'][s] for s in SIDES], 'kv', ms=5, mfc='none',
+                label='oracle floor (weak side)')
+        ax.axhline(window['equal_N'], color='gray', lw=.6, ls='--', label='planned equal split')
         ax.set_xticks([0, 1], ['weak under index', 'weak under middle'])
         br = [out['cells'][f'{m}/{s}']['broke'] for s in SIDES]
         ax.set_title(f'{m}\nbroke {br[0]:.0%} / {br[1]:.0%}')

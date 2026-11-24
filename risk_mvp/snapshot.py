@@ -27,19 +27,24 @@ FINGERS = ('thumb', 'index', 'middle')
 K_REGIONS = 5
 
 
-def swap_window(points, mass=.15, mu=.5, safety=2., margin=.1, mass_margin=.1):
+def swap_window(points, normals=None, R=None, mass=.15, mu=.5, safety=2., margin=.1, mass_margin=.1):
     """How well a three-finger contact set suits the swap experiment, from the allocator itself.
-    Horizontal radial normals are assumed (snapshot normals of side grasps match them closely).
+    normals: contact normals in the object frame (default: horizontal radial, as for the search contacts;
+    pass the snapshot normals to get the numbers the episode allocator will actually see). R: object
+    orientation (object -> world) for the gravity direction, default identity.
     Returns (equal_force, w_index, w_middle): the index/middle force of the risk-blind equal split, and for
     each side the lowest weak-region threshold the oracle allocation can still respect. A good grasp has
     both w_* well below equal_force (room to move load away from either side)."""
     from risk_mvp.allocator import Allocator, Contacts, gravity_wrench
     pos = np.array([points[f] for f in FINGERS], float)
-    nrm = -pos.copy()
-    nrm[:, 2] = 0
+    if normals is None:
+        nrm = -pos.copy()
+        nrm[:, 2] = 0
+    else:
+        nrm = np.array([normals[f] for f in FINGERS], float)
     nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-9)
     C = Contacts(pos, nrm, np.array([0, 1, 2]), list(FINGERS))
-    w = gravity_wrench(mass*(1+mass_margin), np.eye(3))
+    w = gravity_wrench(mass*(1+mass_margin), np.eye(3) if R is None else np.asarray(R, float))
     eq = Allocator(C, 3, mode='equal').solve(w, mu=mu, fmax=8., margin=margin, safety=safety)
     if not eq['feasible']:
         return np.inf, np.inf, np.inf
@@ -126,6 +131,10 @@ def main():
             hull = object_mesh(O.region_spec(oid))
             part = partition(hull, K_REGIONS, seed=0, separate=[pts['index'], pts['middle']])
             regions = {f: int(part.region_of(pts[f])) for f in FINGERS}
+            # the window the episode allocator sees (snapshot normals and pose; defaults of swap_check)
+            eqf, wi, wm = swap_window(pts, {f: safe_normal(nrms[f], pts[f]) for f in FINGERS}, R_o[0])
+            window = dict(equal_N=round(float(eqf), 3), oracle_floor_index_N=round(float(wi), 3),
+                          oracle_floor_middle_N=round(float(wm), 3))
             snap = dict(object=oid, offset_m=list(offset), offset_source=why, k_regions=K_REGIONS,
                         partition_seed=part.seed, partition_separate=[pts['index'].tolist(), pts['middle'].tolist()],
                         q=sc.q()[0].tolist(), target=sc.target[0].tolist(), kp=sc.kp_env[0].tolist(),
@@ -133,7 +142,8 @@ def main():
                         obj_quat=cpu(sc.obj.get_quat()).reshape(4).tolist(), obj_center=p_o[0].tolist(),
                         contacts={f: dict(point_obj=pts[f].tolist(), normal_obj=safe_normal(nrms[f], pts[f]).tolist(),
                                           fn=float(st['contacts'][f]['fn'][0]), region=regions[f]) for f in FINGERS},
-                        touching_after_settle=touching, all_touch_s=float(st['all_touch_tick'][0]/60))
+                        touching_after_settle=touching, all_touch_s=float(st['all_touch_tick'][0]/60),
+                        swap_window=window)
             (a.out/f'{oid}.json').write_text(json.dumps(snap, indent=1)+'\n')
             # picture: two views of the snapshot + contacts on the regions
             rows = [dict(success=True, contact_obj_m={f: pts[f].tolist() for f in FINGERS})]
@@ -146,7 +156,7 @@ def main():
                           a.out/f'{oid}_snapshot.png', cols=3, size=(400, 300))
             tiles.append((imgs[0], f"{oid} I{regions['index']} M{regions['middle']} T{regions['thumb']}"
                                    f"{'' if all(touching.values()) else ' NOT ALL TOUCHING'}"))
-            summary[oid] = dict(offset_m=offset, source=why, regions=regions, touching=touching,
+            summary[oid] = dict(offset_m=offset, source=why, regions=regions, touching=touching, swap_window=window,
                                 touch_N={f: round(float(c[f]['fn'][0]), 3) for f in FINGERS})
         except Exception as exc:
             import traceback
