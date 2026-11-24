@@ -28,8 +28,9 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from collections import Counter
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -88,8 +89,10 @@ def codex_flags(codex: str) -> set:
     return set(re.findall(r'(?<![\w-])(--?[a-zA-Z][\w-]*)', text))
 
 
-def ask(codex: str, flags: set, image: Path, prompt: str, model=None, timeout=600) -> str:
-    """One `codex exec` call with the image attached; returns the final message text."""
+def ask(codex: str, flags: set, image: Path, prompt: str, model=None, timeout=600, log: Path = None,
+        effort=None) -> str:
+    """One `codex exec` call with the image attached; returns the final message text. codex's own
+    progress output goes to `log` (tail -f it to see what a call is doing)."""
     with tempfile.TemporaryDirectory() as td:
         td = Path(td)
         cmd = [codex, 'exec']
@@ -99,6 +102,8 @@ def ask(codex: str, flags: set, image: Path, prompt: str, model=None, timeout=60
             cmd += ['--sandbox', 'read-only']
         if model and ('--model' in flags or '-m' in flags):
             cmd += ['--model', model] if '--model' in flags else ['-m', model]
+        if effort and ('--config' in flags or '-c' in flags):
+            cmd += ['-c', f'model_reasoning_effort="{effort}"']
         if '--image' in flags:
             cmd += ['--image', str(image.resolve())]
         elif '-i' in flags:
@@ -112,12 +117,21 @@ def ask(codex: str, flags: set, image: Path, prompt: str, model=None, timeout=60
             (td/'schema.json').write_text(json.dumps(SCHEMA))
             cmd += ['--output-schema', str(td/'schema.json')]
         cmd.append(prompt)
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=td, stdin=subprocess.DEVNULL)
+        log = log or td/'codex.log'
+        with open(log, 'w') as fh:
+            fh.write(' '.join(cmd[:-1])+' <prompt>\n\n')
+            fh.flush()
+            try:
+                r = subprocess.run(cmd, stdout=fh, stderr=subprocess.STDOUT, text=True, timeout=timeout, cwd=td,
+                                   stdin=subprocess.DEVNULL)
+            except subprocess.TimeoutExpired:
+                raise RuntimeError(f'codex did not answer within {timeout} s (see {log})')
         if out_file.exists() and out_file.read_text().strip():
             return out_file.read_text()
+        text = Path(log).read_text()
         if r.returncode != 0:
-            raise RuntimeError(f'codex exit {r.returncode}: {(r.stderr or r.stdout)[-1500:]}')
-        return r.stdout
+            raise RuntimeError(f'codex exit {r.returncode}: {text[-1500:]}')
+        return text
 
 
 def parse_answer(text: str, seen: list) -> dict:
@@ -239,14 +253,15 @@ def main():
     ap.add_argument('--jobs', type=int, default=4, help='parallel codex calls')
     ap.add_argument('--codex', default=shutil.which('codex') or '/usr/local/bin/codex')
     ap.add_argument('--model', default=None, help='codex model (default: codex config)')
-    ap.add_argument('--timeout', type=int, default=600)
+    ap.add_argument('--timeout', type=int, default=600, help='seconds per codex call')
+    ap.add_argument('--effort', default=None, help='codex reasoning effort, e.g. low / medium (default: codex config)')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     summary = json.loads((a.images/'summary.json').read_text())
     flags = codex_flags(a.codex)
     print('codex', a.codex, 'uses', sorted(f for f in flags if f in {'--image', '-i', '--output-last-message',
                                                                      '--output-schema', '--skip-git-repo-check',
-                                                                     '--sandbox', '--model'}), flush=True)
+                                                                     '--sandbox', '--model', '-c'}), flush=True)
     jobs = []
     for oid in a.objects or list(summary):
         for v in a.variants:
@@ -262,10 +277,18 @@ def main():
             for rep in range(a.repeats):
                 jobs.append((oid, v, rep, img, seen, prompt))
 
+    logs = a.out/'logs'
+    logs.mkdir(exist_ok=True)
+    print(f'{len(jobs)} codex calls, {a.jobs} at a time; each can take a few minutes. '
+          f'Live codex output: tail -f {logs}/<object>_<variant>_<repeat>.log', flush=True)
+    t0 = time.time()
+
     def run(job):
         oid, v, rep, img, seen, prompt = job
+        log = logs/f'{oid}_{v}_{rep}.log'
+        print(f'[{time.time()-t0:6.0f} s] asking {oid}/{v} repeat {rep}  (log {log})', flush=True)
         try:
-            text = ask(a.codex, flags, img, prompt, a.model, a.timeout)
+            text = ask(a.codex, flags, img, prompt, a.model, a.timeout, log=log, effort=a.effort)
         except Exception as exc:                      # noqa: BLE001
             return job, None, f'{type(exc).__name__}: {exc}'
         try:
@@ -275,11 +298,12 @@ def main():
 
     results = {}
     with ThreadPoolExecutor(max(1, a.jobs)) as ex:
-        for job, res, err in ex.map(run, jobs):
+        for fut in as_completed([ex.submit(run, j) for j in jobs]):
+            job, res, err = fut.result()
             oid, v, rep = job[:3]
             results.setdefault((oid, v), []).append(dict(repeat=rep, raw=res[0] if res else None,
                                                          parsed=res[1] if res else None, error=err))
-            print(f'{oid}/{v} repeat {rep}: ' + (err or 'ok'), flush=True)
+            print(f'[{time.time()-t0:6.0f} s] {oid}/{v} repeat {rep}: ' + (err or 'ok'), flush=True)
     labels = {}
     k_max = 0
     for (oid, v), rs in sorted(results.items()):
