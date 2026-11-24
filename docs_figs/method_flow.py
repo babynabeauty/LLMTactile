@@ -117,7 +117,7 @@ box('vlm', 99, 126, 37, 22, 'Astra（gpt-6-astra via codex exec）', [
     '    + 理由 + 把握程度',
     '    + 两两比较 哪块更结实',
     '    + 物体整体强度',
-    '只做判断，不出动作'], status='todo')
+    '只做判断，不出动作；vlm_query.py 已在本地会话写好'], status='doing')
 box('vlmout', 139, 126, 36, 22, '区域判断 JSON', [
     'region k: {标签, 把握 0–1, 理由文本}',
     '理由 → 冻结文本编码器 → 向量',
