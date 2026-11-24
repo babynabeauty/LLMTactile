@@ -48,7 +48,7 @@ def main():
     from risk_mvp import objects as O, viz
     from risk_mvp.pregrasp_search import TEMPLATE, TOUCH_N, CAMERAS, run_episode
     from risk_mvp.regions import object_mesh, partition
-    from risk_mvp.scene import GraspScene
+    from risk_mvp.scene import GraspScene, cpu
     spec = json.loads(TEMPLATE.read_text())
     summary, tiles = {}, []
     for oid in a.objects or list(O.CATALOG):
@@ -60,19 +60,34 @@ def main():
                              stop_after_close=True)
             for _ in range(20):          # settle at the touch force
                 sc.step(sc.target)
-            c = sc.finger_contacts()
-            touching = {f: bool(c[f]['has'][0]) for f in FINGERS}
+            # contacts averaged over the last 10 settle ticks (point/normal of a single tick can be degenerate)
+            hist = []
+            for _ in range(10):
+                sc.step(sc.target)
+                hist.append(sc.finger_contacts())
+            c = hist[-1]
+            touching = {f: bool(all(h[f]['has'][0] for h in hist)) for f in FINGERS}
+            p_o, R_o = sc.object_pose()
             imgs = sc.render()
-            pts = {f: st['contacts'][f]['point_obj'][0] for f in FINGERS}
+            from risk_mvp.episode import safe_normal
+            pts, nrms = {}, {}
+            for f in FINGERS:
+                ok = [h for h in hist if h[f]['has'][0]]
+                if not ok:
+                    pts[f], nrms[f] = st['contacts'][f]['point_obj'][0], st['contacts'][f]['normal_obj'][0]
+                    continue
+                pts[f] = np.mean([R_o[0].T@(h[f]['point'][0]-p_o[0]) for h in ok], 0)
+                nrms[f] = np.mean([R_o[0].T@h[f]['normal'][0] for h in ok], 0)
+                nrms[f] = safe_normal(nrms[f], pts[f])
             hull = object_mesh(O.region_spec(oid))
             part = partition(hull, K_REGIONS, seed=0, separate=[pts['index'], pts['middle']])
             regions = {f: int(part.region_of(pts[f])) for f in FINGERS}
             snap = dict(object=oid, offset_m=list(offset), offset_source=why, k_regions=K_REGIONS,
                         partition_seed=part.seed, partition_separate=[pts['index'].tolist(), pts['middle'].tolist()],
-                        q=st['q'][0].tolist(), target=st['target'][0].tolist(), kp=st['kp'][0].tolist(),
-                        obj_pos_file=st['obj_pos_file'][0].tolist(), obj_quat=st['obj_quat'][0].tolist(),
-                        obj_center=st['obj_center'][0].tolist(),
-                        contacts={f: dict(point_obj=pts[f].tolist(), normal_obj=st['contacts'][f]['normal_obj'][0].tolist(),
+                        q=sc.q()[0].tolist(), target=sc.target[0].tolist(), kp=sc.kp_env[0].tolist(),
+                        obj_pos_file=cpu(sc.obj.get_pos()).reshape(3).tolist(),
+                        obj_quat=cpu(sc.obj.get_quat()).reshape(4).tolist(), obj_center=p_o[0].tolist(),
+                        contacts={f: dict(point_obj=pts[f].tolist(), normal_obj=safe_normal(nrms[f], pts[f]).tolist(),
                                           fn=float(st['contacts'][f]['fn'][0]), region=regions[f]) for f in FINGERS},
                         touching_after_settle=touching, all_touch_s=float(st['all_touch_tick'][0]/60))
             (a.out/f'{oid}.json').write_text(json.dumps(snap, indent=1)+'\n')

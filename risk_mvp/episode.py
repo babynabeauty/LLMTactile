@@ -25,6 +25,17 @@ from risk_mvp.force_ctrl import BatchForceController
 FINGERS = ('thumb', 'index', 'middle')
 
 
+def safe_normal(n, point_obj):
+    """Unit inward normal; if the stored one is missing/degenerate, point horizontally from the contact
+    toward the object's vertical axis."""
+    n = np.asarray(n, float)
+    if np.all(np.isfinite(n)) and np.linalg.norm(n) > .5:
+        return n/np.linalg.norm(n)
+    d = -np.asarray(point_obj, float)
+    d[2] = 0.
+    return d/max(np.linalg.norm(d), 1e-9)
+
+
 @dataclass
 class TrialConfig:
     mu_hat: float = .5            # allocator's slip-limit friction estimate
@@ -58,7 +69,8 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     sc.restore(snap)
     mass = np.broadcast_to(np.asarray(sc.mass_kg if mass_kg is None else mass_kg, float), (E,))
     pos = np.array([snap['contacts'][f]['point_obj'] for f in FINGERS])
-    nrm = np.array([snap['contacts'][f]['normal_obj'] for f in FINGERS])
+    nrm = np.array([snap['contacts'][f]['normal_obj'] for f in FINGERS], float)
+    nrm = np.array([safe_normal(n, p) for n, p in zip(nrm, pos)])
     reg = np.array([snap['contacts'][f]['region'] for f in FINGERS])
     allocs = [Allocator(Contacts(pos, nrm, reg, list(FINGERS)), part.k, mode=m) for m in modes]
     ctrl = {f: BatchForceController(E) for f in FINGERS}

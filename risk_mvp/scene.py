@@ -218,7 +218,10 @@ class GraspScene:
             w = np.where(m, fn_all, 0.)
             tot = w.sum(1)
             has = m.any(1)
-            p = (pos*w[..., None]).sum(1)/np.maximum(tot, 1e-9)[:, None]
+            # force-weighted point and normal; contacts that touch with ~0 force get equal weights instead
+            w = np.where((tot > 1e-6)[:, None], w, m.astype(float))
+            ws = np.maximum(w.sum(1), 1e-9)
+            p = (pos*w[..., None]).sum(1)/ws[:, None]
             n = (nrm*w[..., None]).sum(1)
             n = n/np.maximum(np.linalg.norm(n, axis=1, keepdims=True), 1e-9)
             tang = np.linalg.norm((on_obj*m[..., None]).sum(1)-(n*tot[:, None]), axis=1)
