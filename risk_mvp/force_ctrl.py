@@ -119,3 +119,44 @@ def finger_contact(rows: Sequence[dict], link_name: str, object_entity: str = 'c
     if n@ref < 0:
         n = -n
     return float(max(total@n, 0.)), point, n
+
+
+class BatchForceController:
+    """FingerForceController for E environments at once (numpy). One instance per finger.
+
+    step() inputs are (E, ...) arrays: q/kp/effort/lower/upper/closed_q (E, n), J_origin (E, 6, n),
+    link_pos/contact_point/normal_in (E, 3), measured_N/target_N (E,), has_contact (E,) bool.
+    """
+
+    def __init__(self, n_envs: int, gains: PIGains = PIGains(), dt: float = 1/60, contact_min_N: float = .05):
+        self.g, self.dt, self.cmin = gains, dt, contact_min_N
+        self.integ = np.zeros(n_envs)
+        self.in_contact = np.zeros(n_envs, bool)
+
+    def reset(self, envs=None):
+        idx = slice(None) if envs is None else envs
+        self.integ[idx] = 0.
+        self.in_contact[idx] = False
+
+    def step(self, target_N, q, kp, effort, lower, upper, J_origin, link_pos, contact_point, normal_in,
+             measured_N, has_contact, closed_q):
+        g = self.g
+        touching = has_contact & (measured_N > self.cmin)
+        self.in_contact |= touching
+        force = self.in_contact & has_contact
+        # approach: close toward the closed posture at a fixed joint speed
+        step = g.close_speed_rad_s*self.dt
+        q_app = q+np.clip(closed_q-q, -step, step)
+        # force: PI on the normal force, tau = J_c^T f n
+        err = target_N-measured_N
+        self.integ = np.where(force, np.clip(self.integ+g.ki*err*self.dt, -g.i_limit_N, g.i_limit_N), self.integ)
+        f_cmd = np.maximum(0., target_N+g.kp*err+self.integ)
+        r = contact_point-link_pos                                       # (E, 3)
+        J_lin, J_ang = J_origin[:, :3], J_origin[:, 3:]                  # (E, 3, n)
+        Jc = J_lin-np.cross(r[:, :, None], J_ang, axisa=1, axisb=1, axisc=1)   # [r]x J_ang column-wise
+        n = normal_in/np.maximum(np.linalg.norm(normal_in, axis=1, keepdims=True), 1e-12)
+        tau = np.clip(np.einsum('ein,ei->en', Jc, f_cmd[:, None]*n), -effort, effort)
+        q_force = q+tau/kp
+        # in contact once but lost it this tick: hold the last command
+        q_t = np.where(force[:, None], q_force, np.where(self.in_contact[:, None], q, q_app))
+        return np.clip(q_t, lower, upper), dict(f_cmd=f_cmd, tau=tau, force=force)

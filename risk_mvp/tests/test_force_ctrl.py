@@ -60,3 +60,24 @@ def test_finger_contact_orients_normal_and_sign():
                  force_on_a_world_N=[-2., 0, .1], normal_world=[-1., 0, 0], position_world_m=[-.02, 0, 0])]
     fn, p, n = finger_contact(rows, 'right_hand_mid_link2', object_center=np.zeros(3))
     assert np.isclose(fn, 2.) and np.allclose(n, [1, 0, 0])
+
+
+def test_batch_controller_matches_single():
+    from risk_mvp.force_ctrl import BatchForceController
+    q = np.array([.3, .5])
+    o2, tip, J = planar_two_link(q)
+    single = FingerForceController(fingers=('index',))
+    out = single.step('index', 2., measured_N=1.5, q=q, kp=np.array([9., 9.]), effort=np.array([1.1, .4]),
+                      lower=-np.ones(2)*3, upper=np.ones(2)*3, J_origin=J, link_pos=o2, contact_point=tip,
+                      normal_in=np.array([1., 0, 0]))
+    E = 3
+    b = BatchForceController(E)
+    rep = lambda x: np.repeat(np.asarray(x, float)[None], E, 0)
+    qt, info = b.step(rep(2.), rep(q), rep([9., 9.]), rep([1.1, .4]), rep(-np.ones(2)*3), rep(np.ones(2)*3),
+                      rep(J), rep(o2), rep(tip), rep([1., 0, 0]), rep(1.5), np.ones(E, bool), rep([.8, .6]))
+    assert np.allclose(qt, out['q_target'][None]) and np.allclose(info['tau'], out['tau'][None])
+    # no contact -> approach step toward the closed posture
+    b2 = BatchForceController(E)
+    qt2, _ = b2.step(rep(2.), rep(q), rep([9., 9.]), rep([1.1, .4]), rep(-np.ones(2)*3), rep(np.ones(2)*3),
+                     rep(J), rep(o2), rep(tip), rep([1., 0, 0]), rep(0.), np.zeros(E, bool), rep([.8, .6]))
+    assert np.allclose(qt2, q+np.clip(np.array([.8, .6])-q, -.4/60, .4/60))
