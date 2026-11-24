@@ -27,14 +27,22 @@ FINGERS = ('thumb', 'index', 'middle')
 K_REGIONS = 5
 
 
-def pick_offset(search_json: dict):
-    if search_json.get('best'):
-        return search_json['best']['offset_m'], 'best successful pose'
-    touched = [e for e in search_json['envs'] if e.get('all_touch_s') is not None and not e['pre_touch']]
-    if not touched:
+def candidate_offsets(search_json: dict):
+    """Successful poses first, the most symmetric first (thumb opposite the midpoint of index and middle,
+    so both sides of the swap experiment have room to move load), then the three-finger touches."""
+    def asym(e):
+        p = e['contact_obj_m']
+        if not all(f in p for f in FINGERS):
+            return 1.
+        return abs(p['thumb'][1]-(p['index'][1]+p['middle'][1])/2)
+    succ = sorted([e for e in search_json['envs'] if e['success']], key=lambda e: (asym(e), e['drift_mm']))
+    out = [(e['offset_m'], f'successful pose, thumb offset from the finger midpoint {asym(e)*1000:.1f} mm') for e in succ]
+    touched = sorted([e for e in search_json['envs'] if e.get('all_touch_s') is not None and not e['pre_touch']
+                      and not e['success']], key=lambda e: (e['close_shift_mm'], asym(e)))
+    out += [(e['offset_m'], 'three-finger touch without a successful lift') for e in touched]
+    if not out:
         raise RuntimeError('no env of the search reached a three-finger touch')
-    e = min(touched, key=lambda e: (e['close_shift_mm'], abs(np.array(e['offset_m'])).sum()))
-    return e['offset_m'], 'three-finger touch with least push (no successful lift in the search)'
+    return out
 
 
 def main():
@@ -43,6 +51,7 @@ def main():
     ap.add_argument('--out', type=Path, default=ROOT/'outputs/risk_mvp/snapshots')
     ap.add_argument('--objects', nargs='*', default=None)
     ap.add_argument('--backend', default='gpu')
+    ap.add_argument('--max-tries', type=int, default=6)
     ap.add_argument('--touch', type=float, default=.5, help='index/middle force at the snapshot (thumb twice), N')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
@@ -55,16 +64,20 @@ def main():
     for oid in a.objects or list(O.CATALOG):
         try:
             sj = json.loads((a.search/f'{oid}.json').read_text())
-            offset, why = pick_offset(sj)
-            sc = GraspScene(oid, 1, backend=a.backend, cameras=CAMERAS)
             t_touch = a.touch
-            st = run_episode(sc, spec, np.array([offset]), targets=dict(thumb=2*t_touch, index=t_touch, middle=t_touch),
-                             stop_after_close=True)
-            # state at the end of the force-controlled close (force control still active, no position-only
-            # settle); contacts averaged over its last 10 ticks
-            hist = st['close_hist']
+            # try candidate poses until one ends the close with all three fingers touching
+            for k, (offset, why) in enumerate(candidate_offsets(sj)[:a.max_tries]):
+                sc = GraspScene(oid, 1, backend=a.backend, cameras=CAMERAS)
+                st = run_episode(sc, spec, np.array([offset]), targets=dict(thumb=2*t_touch, index=t_touch, middle=t_touch),
+                                 stop_after_close=True)
+                hist = st['close_hist']
+                touching = {f: bool(all(h[f]['has'][0] for h in hist)) for f in FINGERS}
+                print(f'  {oid} candidate {k}: offset {np.round(np.array(offset)*1000, 1).tolist()} mm, touching {touching}',
+                      flush=True)
+                if all(touching.values()):
+                    why += f' (candidate {k})'
+                    break
             c = hist[-1]
-            touching = {f: bool(all(h[f]['has'][0] for h in hist)) for f in FINGERS}
             p_o, R_o = sc.object_pose()
             imgs = sc.render()
             from risk_mvp.episode import safe_normal

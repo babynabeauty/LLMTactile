@@ -80,12 +80,16 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     targets = np.full((E, 3), cfg.touch_N)
     alloc_fn = targets.copy()
     feasible = np.ones(E, bool)
-    q_arm0 = sc.q()[:, :6]
+    # Lift from the commanded arm target, not the measured (sagging) joints: starting from the measured
+    # ones dropped the hand by the ~4 mm sag at lift start and made the fingers lose and re-hit the object.
+    q_arm0 = sc.target[:, :6].copy()
     wpos, wquat = sc.wrist_pose()
-    q_lift, _ = sc.ik(wpos+np.array([0, 0, cfg.lift_m]), wquat)
+    q_here, _ = sc.ik(wpos, wquat)
+    q_up, _ = sc.ik(wpos+np.array([0, 0, cfg.lift_m]), wquat)
+    q_lift = q_arm0+(q_up-q_here)
     start_center, _ = sc.object_pose()
     n_ticks = cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
-    log = dict(fn=np.zeros((n_ticks, E, 3)), target=np.zeros((n_ticks, E, 3)), region_F=np.zeros((n_ticks, E, part.k)),
+    log = dict(live_region_mismatch=np.zeros((n_ticks, E, 3), bool), fn=np.zeros((n_ticks, E, 3)), target=np.zeros((n_ticks, E, 3)), region_F=np.zeros((n_ticks, E, part.k)),
                has=np.zeros((n_ticks, E, 3), bool), phase=[])
     for t in range(n_ticks):
         phase = 'preload' if t < cfg.preload_ticks else 'lift' if t < cfg.preload_ticks+cfg.lift_ticks else 'hold'
@@ -126,8 +130,11 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
         F = np.zeros((E, part.k))
         for i, f in enumerate(FINGERS):
             p_obj = np.einsum('eji,ej->ei', R, c[f]['point']-center)
-            r = part.region_of(p_obj)
-            np.add.at(F, (np.arange(E), r), np.where(c[f]['has'], c[f]['fn'], 0.))
+            # Each finger's force goes to its snapshot region (the allocator plans with the same regions).
+            # Mapping the live contact point instead flipped regions when a contact sat near a boundary and
+            # summed two fingers into one region (spurious breaks at 0.1 s with every force below threshold).
+            F[:, reg[i]] += np.where(c[f]['has'], c[f]['fn'], 0.)
+            log['live_region_mismatch'][t, :, i] = c[f]['has'] & (part.region_of(p_obj) != reg[i])
             log['fn'][t, :, i] = c[f]['fn']
             log['has'][t, :, i] = c[f]['has']
         judge.update(F, t)

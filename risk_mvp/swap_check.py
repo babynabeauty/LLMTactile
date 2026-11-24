@@ -93,7 +93,9 @@ def main():
             success=float(res.success[idx].mean()), feasible=float(res.log['feasible'][idx].mean()),
             hold_N={f: float(fn_hold[idx, i].mean()) for i, f in enumerate(FINGERS)},
             weak_threshold_N=float(np.mean([thr[e, region_of[s]] for e in idx])),
-            broken_regions=[res.events[e]['region'] for e in idx if res.events[e]])
+            broken_regions=[res.events[e]['region'] for e in idx if res.events[e]],
+            break_time_s=[round(res.events[e]['step']/60, 3) for e in idx if res.events[e]],
+            live_region_mismatch=float(res.log['live_region_mismatch'][:, idx].mean()))
     (a.out/'result.json').write_text(json.dumps(out, indent=1)+'\n')
     print(json.dumps(out['cells'], indent=1))
 
