@@ -5,7 +5,8 @@ object centre, grip gain 3). For each object the palm offset is shifted by the o
 difference along x (the thumb-fingers axis of the template) plus a grid dx x dy x dz, one grid point per
 env. Episode (60 Hz control, 1/300 s physics):
   settle 10 -> approach (joint space to a pre-pose 12 cm above, hand opening) 120 -> descend 60
-  -> sag correction 20 -> force-controlled close 120 (thumb 2 N, index 1 N, middle 1 N)
+  -> sag correction 20 -> close 120: each finger flexes toward its joint limit until contact, holds 0.2 N
+     until all three touch, then ramps over 1/3 s to thumb 2 N, index 1 N, middle 1 N
   -> lift 5 cm 60 -> hold 120.
 Success: no contact before closing, all three fingers in contact through the hold, lifted > 3.5 cm,
 object drift relative to the wrist < 3 mm and < 10 deg during the hold.
@@ -40,6 +41,7 @@ TEMPLATE = ROOT/'configs/v1/demos/cuboid_tripod.json'
 TEMPLATE_HALF_X = .045/2
 FINGERS = ('thumb', 'index', 'middle')
 TARGET_N = dict(thumb=2., index=1., middle=1.)
+TOUCH_N, RAMP_TICKS = .2, 20
 CAMERAS = [dict(offset=(.20, -.30, .16)), dict(offset=(-.05, -.34, .06), lookat_offset=(-.02, 0, .03))]
 PHASE_TICKS = dict(settle=10, approach=120, descend=60, correct=30, close=120, lift=60, hold=120)
 
@@ -118,16 +120,29 @@ def run_episode(sc, spec, offsets, on_phase_end=None, targets=None):
     others = [k for k in range(6, 18) if k not in driven]
     sc.target[:, others] = closed_h[[k-6 for k in others]]   # thumb rotation, abduction, ring, pinky
 
+    # Close: every finger flexes until it touches (goal = its flexion limit, not the cuboid demo's closed
+    # posture, which a smaller or lower-held object may never reach). A finger that touches holds a light
+    # TOUCH_N until all three touch, then all ramp to their targets over RAMP_TICKS, so the first finger
+    # does not push the object away before the thumb arrives.
+    all_touch_tick = np.full(E, -1)
+    tick_no = [0]
+
     def hand_tick():
         c = sc.finger_contacts()
         J = sc.finger_jacobians()
         q = sc.q()
         tgt = sc.target.copy()
+        touching = np.all([ctrl[f].in_contact | (c[f]['has'] & (c[f]['fn'] > .05)) for f in FINGERS], 0)
+        newly = touching & (all_touch_tick < 0)
+        all_touch_tick[newly] = tick_no[0]
+        ramp = np.where(all_touch_tick < 0, 0., np.clip((tick_no[0]-all_touch_tick)/RAMP_TICKS, 0, 1))
+        tick_no[0] += 1
         for f in FINGERS:
             cols = sc.finger_cols[f]
-            qt, _ = ctrl[f].step(np.full(E, targets[f]), q[:, cols], sc.kp_env[:, cols], sc.effort[cols],
+            goal = TOUCH_N+ramp*(targets[f]-TOUCH_N)
+            qt, _ = ctrl[f].step(goal, q[:, cols], sc.kp_env[:, cols], sc.effort[cols],
                                  sc.lower[cols], sc.upper[cols], J[f][0], J[f][1], c[f]['point'], c[f]['normal'],
-                                 c[f]['fn'], c[f]['has'], np.tile(closed_h[closed_cols[f]], (E, 1)))
+                                 c[f]['fn'], c[f]['has'], np.tile(sc.upper[cols], (E, 1)))
             tgt[:, cols] = qt
         return tgt, c
 
@@ -190,7 +205,8 @@ def run_episode(sc, spec, offsets, on_phase_end=None, targets=None):
                          palm_obj_N=float(np.mean([h['other_robot_obj_N'][e] for h in hold])),
                          ik_err_pre=float(np.linalg.norm(err_pre[e, :3])), ik_err_align=float(np.linalg.norm(err_al[e, :3])),
                          sag_mm=(sag[e]*1000).round(2).tolist(),
-                         first_loss=first_loss(e), close_shift_mm=float(close_shift[e]*1000)))
+                         first_loss=first_loss(e), close_shift_mm=float(close_shift[e]*1000),
+                         all_touch_s=float(all_touch_tick[e]/60) if all_touch_tick[e] >= 0 else None))
     meta = dict(targets_N=targets, palm_offset_base_m=palm_offset.tolist(), palm_quaternion_wxyz=spec['palm_quaternion_wxyz'],
                 open_hand_rad=open_h.tolist(), closed_hand_rad=closed_h.tolist(), grip_gain=spec.get('grip_gain', 1.))
     return rows, log, meta
