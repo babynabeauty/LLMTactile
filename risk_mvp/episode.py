@@ -51,7 +51,8 @@ class TrialConfig:
     eps: float = .05              # damage budget for the risk mode
     mass_margin: float = .1
     fmax_N: float = 8.
-    touch_N: float = .5            # snapshot touch force (snapshot.py --touch)
+    touch_N: float = .5            # snapshot touch force (snapshot.py --touch; thumb twice), used only when the
+                                   # snapshot has no per-finger contact force
     settle_ticks: int = 15         # hold the touch force after the restore, not judged
     preload_ticks: int = 30
     lift_ticks: int = 60
@@ -85,7 +86,11 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     for f in FINGERS:
         ctrl[f].in_contact[:] = True
     judge = DamageJudge(thresholds)
-    targets = np.full((E, 3), cfg.touch_N)
+    # Start from the forces the snapshot was closed with (thumb ~2x index/middle). Settling all three at
+    # touch_N let the thumb drop to 0 N and pushed index/middle over their targets when it came back.
+    start_N = np.array([snap['contacts'][f].get('fn', np.nan) for f in FINGERS], float)
+    start_N = np.where(np.isfinite(start_N) & (start_N > .1), start_N, cfg.touch_N*np.array([2., 1., 1.]))
+    targets = np.tile(start_N, (E, 1))
     alloc_fn = targets.copy()
     feasible = np.ones(E, bool)
     # Lift from the commanded arm target, not the measured (sagging) joints: starting from the measured
@@ -139,7 +144,7 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
                 feasible[e] &= rep['feasible']
                 ok_now[e], eq_slack[e], risk_slack[e] = rep['feasible'], rep['eq_slack'], rep['risk_slack']
         ramp = 0. if t < S else min(1., (t-S+1)/cfg.preload_ticks)
-        targets = cfg.touch_N+ramp*(alloc_fn-cfg.touch_N)
+        targets = start_N+ramp*(alloc_fn-start_N)
         # force control
         J = sc.finger_jacobians()
         q = sc.q()
