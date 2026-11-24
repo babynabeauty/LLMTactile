@@ -100,3 +100,4 @@ Genesis/genesis/ext/VolumeSampling
 
 # Portable mesh assets for the two insertion scenes.
 !ur7e_xhand_sim/sources/insertion/**/*.obj
+risk_mvp/assets/

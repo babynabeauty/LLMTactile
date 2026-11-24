@@ -32,6 +32,10 @@ def object_mesh(spec: dict, max_edge_m: float = .004) -> trimesh.Trimesh:
     if 'mesh_path' in spec:
         m = trimesh.load(spec['mesh_path'], force='mesh')
         m.apply_translation(-m.bounds.mean(0))
+        if spec.get('exterior', True):
+            # Fingers only touch the outside: partition the convex hull, so thin-walled objects (cups)
+            # do not mix inner and outer wall in one region and region normals stay meaningful.
+            m = m.convex_hull
     else:
         shape = spec['shape']
         if shape == 'cube':
