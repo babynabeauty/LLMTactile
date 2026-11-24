@@ -1,13 +1,20 @@
-"""One batched trial from a snapshot (MVP step 3): allocate -> preload -> lift 5 cm -> hold 2 s.
+"""One batched trial from a snapshot (MVP step 3): settle -> allocate/preload -> lift 5 cm -> hold 2 s.
 
 Every env starts from the same already-touching grasp (snapshot.py). Per env it gets an allocation
 method, hidden region thresholds, object mass and contact friction. At 60 Hz:
   - every `alloc_every` ticks the env's Allocator gives per-finger normal targets (the contact geometry
     and regions are those of the snapshot, in the object frame; the external wrench is gravity in the
     current object frame, mass x (1 + mass_margin));
+  - settle (0.25 s): the force controller holds the touch force so the restored contacts settle; the
+    restore made index/middle drop to 0 N and re-hit at ~1.1 N within the first 0.25 s (065-a). Not
+    judged for damage; its peak region force is logged (settle_peak_N) to check it stays harmless;
   - targets ramp from the touch force to the allocation during the preload, then the arm lifts and holds;
   - BatchForceController tracks the targets; the solver's per-finger normal forces are summed per region
     (each contact point mapped to its region in the object frame) and fed to DamageJudge.
+Also logged per tick: the object pose relative to the wrist since the start of the preload (in-hand
+rotation obj_rot_deg and slip obj_slip_mm; the allocator re-plans with the current object orientation, so
+a slow in-hand rotation shows up as drifting targets) and the allocator report (alloc_ok, eq_slack = wrench
+it could not supply within the friction cone, risk_slack = excess over a damage limit).
 Outcome per env: broke (first damage event), dropped (lifted less than 60 % of the planned height or a
 finger lost contact in the last 0.5 s), success = neither. The archive rows follow damage.DamageJudge.
 """
@@ -45,6 +52,7 @@ class TrialConfig:
     mass_margin: float = .1
     fmax_N: float = 8.
     touch_N: float = .5            # snapshot touch force (snapshot.py --touch)
+    settle_ticks: int = 15         # hold the touch force after the restore, not judged
     preload_ticks: int = 30
     lift_ticks: int = 60
     hold_ticks: int = 120
@@ -87,15 +95,36 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     q_here, _ = sc.ik(wpos, wquat)
     q_up, _ = sc.ik(wpos+np.array([0, 0, cfg.lift_m]), wquat)
     q_lift = q_arm0+(q_up-q_here)
-    start_center, _ = sc.object_pose()
-    n_ticks = cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
+    S = cfg.settle_ticks
+    n_ticks = S+cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
     log = dict(live_region_mismatch=np.zeros((n_ticks, E, 3), bool), fn=np.zeros((n_ticks, E, 3)), target=np.zeros((n_ticks, E, 3)), region_F=np.zeros((n_ticks, E, part.k)),
-               has=np.zeros((n_ticks, E, 3), bool), phase=[])
+               has=np.zeros((n_ticks, E, 3), bool), phase=[], obj_rot_deg=np.zeros((n_ticks, E)),
+               obj_slip_mm=np.zeros((n_ticks, E)), alloc_ok=np.ones((n_ticks, E), bool),
+               eq_slack=np.zeros((n_ticks, E)), risk_slack=np.zeros((n_ticks, E)), settle_peak_N=np.zeros(E))
+    eq_slack, risk_slack, ok_now = np.zeros(E), np.zeros(E), np.ones(E, bool)
+
+    from risk_mvp.scene import quat_to_mat
+
+    def in_hand():
+        """Object pose in the wrist frame: (p (E,3), R (E,3,3))."""
+        pw, qw = sc.wrist_pose()
+        Rw = quat_to_mat(qw)
+        p_o, R_o = sc.object_pose()
+        return np.einsum('eji,ej->ei', Rw, p_o-pw), np.einsum('eji,ejk->eik', Rw, R_o)
+
+    start_center = None
     for t in range(n_ticks):
-        phase = 'preload' if t < cfg.preload_ticks else 'lift' if t < cfg.preload_ticks+cfg.lift_ticks else 'hold'
+        if t < S:
+            phase = 'settle'
+        else:
+            u = t-S
+            phase = 'preload' if u < cfg.preload_ticks else 'lift' if u < cfg.preload_ticks+cfg.lift_ticks else 'hold'
+        if t == S:
+            start_center, _ = sc.object_pose()
+            p_h0, R_h0 = in_hand()
         c = sc.finger_contacts()
         center, R = sc.object_pose()
-        if t % cfg.alloc_every == 0:
+        if t >= S and (t-S) % cfg.alloc_every == 0:
             for e in range(E):
                 w = gravity_wrench(mass[e]*(1+cfg.mass_margin), R[e])
                 kw = dict(w_ext=w, mu=cfg.mu_hat, fmax=cfg.fmax_N, margin=cfg.margin_N, safety=cfg.safety)
@@ -108,7 +137,8 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
                 rep = allocs[e].solve(**kw)
                 alloc_fn[e] = [rep['finger_normal'][f] for f in FINGERS]
                 feasible[e] &= rep['feasible']
-        ramp = min(1., (t+1)/cfg.preload_ticks)
+                ok_now[e], eq_slack[e], risk_slack[e] = rep['feasible'], rep['eq_slack'], rep['risk_slack']
+        ramp = 0. if t < S else min(1., (t-S+1)/cfg.preload_ticks)
         targets = cfg.touch_N+ramp*(alloc_fn-cfg.touch_N)
         # force control
         J = sc.finger_jacobians()
@@ -121,7 +151,7 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
                                  c[f]['has'], np.tile(sc.upper[cols], (E, 1)))
             tgt[:, cols] = qt
         if phase == 'lift':
-            s = (t-cfg.preload_ticks+1)/cfg.lift_ticks
+            s = (t-S-cfg.preload_ticks+1)/cfg.lift_ticks
             tgt[:, :6] = q_arm0+(s*s*(3-2*s))*(q_lift-q_arm0)
         sc.step(tgt)
         # damage: per-finger solver force at the region of its contact point
@@ -137,7 +167,16 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
             log['live_region_mismatch'][t, :, i] = c[f]['has'] & (part.region_of(p_obj) != reg[i])
             log['fn'][t, :, i] = c[f]['fn']
             log['has'][t, :, i] = c[f]['has']
-        judge.update(F, t)
+        if t < S:
+            log['settle_peak_N'] = np.maximum(log['settle_peak_N'], F.max(1))
+        else:
+            judge.update(F, t)
+        if t >= S:
+            p_h, R_h = in_hand()
+            cosang = (np.einsum('eji,eji->e', R_h0, R_h)-1)/2      # trace(R_h0^T R_h)
+            log['obj_rot_deg'][t] = np.degrees(np.arccos(np.clip(cosang, -1., 1.)))
+            log['obj_slip_mm'][t] = 1000*np.linalg.norm(p_h-p_h0, axis=1)
+        log['alloc_ok'][t], log['eq_slack'][t], log['risk_slack'][t] = ok_now, eq_slack, risk_slack
         log['target'][t] = targets
         log['region_F'][t] = F
         log['phase'].append(phase)

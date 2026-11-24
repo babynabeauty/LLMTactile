@@ -24,8 +24,10 @@ which the allocation decides between holding and breaking.
 Pictures:
   swap_forces.png   hold-phase index/middle force vs weak side, per method (the crossing plot)
   swap_outcomes.png break / drop / success rate per method and weak side
-  swap_traces.png   force traces of one env per method x side, with the weak threshold
-Send back these three PNGs and result.json.
+  swap_traces.png   force traces of one env per method x side, with the weak threshold; red shading =
+                    ticks where that env's allocation was infeasible
+  swap_inhand.png   object rotation / slip relative to the wrist per method x side
+Send back these four PNGs and result.json.
 """
 from __future__ import annotations
 
@@ -110,7 +112,8 @@ def main():
     sc.set_mass(a.mass)
     sc.set_friction(a.mu)
     res = run_trial(sc, snap, part, modes, thr, cfg, mass_kg=a.mass)
-    hold = np.array(res.log['phase']) == 'hold'
+    phase_arr = np.array(res.log['phase'])
+    hold = phase_arr == 'hold'
     fn_hold = res.log['fn'][hold].mean(0)                     # (E, 3)
     out = dict(config={k: (str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()},
                regions=region_of, window=window, cells={})
@@ -123,9 +126,21 @@ def main():
             weak_threshold_N=float(np.mean([thr[e, region_of[s]] for e in idx])),
             broken_regions=[res.events[e]['region'] for e in idx if res.events[e]],
             break_time_s=[round(res.events[e]['step']/60, 3) for e in idx if res.events[e]],
-            live_region_mismatch=float(res.log['live_region_mismatch'][:, idx].mean()))
+            live_region_mismatch=float(res.log['live_region_mismatch'][:, idx].mean()),
+            settle_peak_N=float(res.log['settle_peak_N'][idx].max()),
+            max_rot_deg=float(res.log['obj_rot_deg'][:, idx].max()),
+            end_rot_deg=float(res.log['obj_rot_deg'][-1, idx].mean()),
+            max_slip_mm=float(res.log['obj_slip_mm'][:, idx].max()),
+            alloc_ok_frac={ph: float(res.log['alloc_ok'][phase_arr == ph][:, idx].mean())
+                           for ph in ('preload', 'lift', 'hold')},
+            max_eq_slack=float(res.log['eq_slack'][:, idx].max()),
+            max_risk_slack=float(res.log['risk_slack'][:, idx].max()))
     (a.out/'result.json').write_text(json.dumps(out, indent=1)+'\n')
     print(json.dumps(out['cells'], indent=1))
+    print(f"{'cell':16s} broke dropped  index  middle  max_rot_deg max_slip_mm  settle_peak_N  alloc_ok(hold)")
+    for k, v in out['cells'].items():
+        print(f"{k:16s} {v['broke']:5.2f} {v['dropped']:7.2f}  {v['hold_N']['index']:5.2f}  {v['hold_N']['middle']:6.2f}"
+              f"  {v['max_rot_deg']:11.1f} {v['max_slip_mm']:11.1f}  {v['settle_peak_N']:13.2f}  {v['alloc_ok_frac']['hold']:14.2f}")
 
     # ---- pictures ----
     import os
@@ -183,17 +198,52 @@ def main():
             ax.axhline(thr[e, region_of[s]], color='k', ls=':', label='weak threshold')
             for ts, p in starts:
                 ax.axvline(ts, color='gray', lw=.5)
+            bad = ~res.log['alloc_ok'][:, e]
+            if bad.any():
+                ax.fill_between(t, 0, 1, where=bad, color='tab:red', alpha=.12, lw=0,
+                                transform=ax.get_xaxis_transform(), label='allocator infeasible')
             ev = res.events[e]
             if ev:
                 ax.axvline(ev['step']/60, color='r', lw=1.5)
             ax.set_title(f'{m}, weak under {s}' + (' - BROKE' if ev else ''), fontsize=9)
     axs[0, 0].legend(fontsize=7)
     for ax in axs[-1]:
-        ax.set_xlabel('s (preload | lift | hold)')
+        ax.set_xlabel('s (settle | preload | lift | hold)')
     for ax in axs[:, 0]:
         ax.set_ylabel('normal force N (dashed: target)')
     fig.tight_layout()
     fig.savefig(a.out/'swap_traces.png', dpi=110)
+    plt.close(fig)
+
+    # in-hand motion: object rotation / slip relative to the wrist since the preload started,
+    # and the fraction of envs whose allocation was infeasible
+    rows = (('obj_rot_deg', 'in-hand rotation deg'), ('obj_slip_mm', 'in-hand slip mm'),
+            ('alloc_bad', 'infeasible allocation\n(fraction of envs)'))
+    fig, axs = plt.subplots(len(rows), len(SIDES), figsize=(5.2*len(SIDES), 7.2), sharex=True, sharey='row')
+    for j, s in enumerate(SIDES):
+        for i, (key, lab) in enumerate(rows):
+            ax = axs[i, j]
+            for k, m in enumerate(METHODS):
+                idx = [e for e in range(E) if modes[e] == m and sides[e] == s]
+                if key == 'alloc_bad':
+                    ax.plot(t, 1-res.log['alloc_ok'][:, idx].mean(1), f'C{k}', label=m)
+                    ax.set_ylim(-.05, 1.05)
+                    continue
+                y = res.log[key][:, idx]
+                ax.plot(t, np.median(y, 1), f'C{k}', label=m)
+                ax.fill_between(t, y.min(1), y.max(1), color=f'C{k}', alpha=.15, lw=0)
+            for ts, p in starts:
+                ax.axvline(ts, color='gray', lw=.5)
+            if j == 0:
+                ax.set_ylabel(lab)
+            if i == 0:
+                ax.set_title(f'weak under {s}', fontsize=9)
+    axs[0, 0].legend(fontsize=7, title='median, band = min..max', title_fontsize=7)
+    for ax in axs[-1]:
+        ax.set_xlabel('s (settle | preload | lift | hold)')
+    fig.suptitle(f'{a.object}: does the object turn or slide in the hand?')
+    fig.tight_layout()
+    fig.savefig(a.out/'swap_inhand.png', dpi=110)
     plt.close(fig)
     print('WROTE', a.out)
 
