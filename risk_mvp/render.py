@@ -12,6 +12,11 @@ import numpy as np
 AZIMUTHS = (0., 90., 180., 270.)
 
 
+def fit_distance(extent_m, fov_deg=30., fill=.55):
+    """Camera distance at which the object's largest extent spans about `fill` of the image height."""
+    return float(max(extent_m))/fill/(2*np.tan(np.deg2rad(fov_deg)/2))
+
+
 def orbit(center, dist=.26, elev_deg=35., azimuths=AZIMUTHS):
     """Camera positions around `center` (world), azimuth 0 = +x side."""
     out = []

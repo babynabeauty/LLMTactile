@@ -45,7 +45,7 @@ def main():
     scene = gs.Scene(sim_options=gs.options.SimOptions(dt=1/300), show_viewer=False,
                      vis_options=gs.options.VisOptions(background_color=(.9, .9, .9), ambient_light=(.5, .5, .5)))
     scene.add_entity(gs.morphs.Plane(), surface=gs.surfaces.Default(color=(.55, .55, .58, 1)))
-    res, fov = (640, 480), 40.
+    res, fov = (640, 480), 30.
     items = []
     for i, oid in enumerate(O.CATALOG):
         info = O.load(oid)
@@ -54,6 +54,7 @@ def main():
         side = np.flatnonzero(part.contactable())
         cue_region = int(side[np.argmin(np.abs(part.normal[side, 2]))]) if len(side) else 0
         cue_obj = O.paint_cue(oid, part, cue_region, a.out/'cue_assets')
+        contrast = O.paint_cue.last_contrast
         rho = info['mass_kg']/info['mesh'].convex_hull.volume
         variants = []
         for j, path in enumerate([info['path'], str(cue_obj)]):
@@ -61,9 +62,10 @@ def main():
             ent = scene.add_entity(gs.morphs.Mesh(file=path, pos=tuple(center+np.asarray(info['offset'])), convexify=True),
                                    material=gs.materials.Rigid(rho=rho, friction=.8))
             cams = [(scene.add_camera(res=res, pos=tuple(p), lookat=tuple(center), fov=fov, GUI=False), p)
-                    for p in RD.orbit(center)]
+                    for p in RD.orbit(center, dist=RD.fit_distance(info['extent_m'], fov))]
             variants.append(dict(entity=ent, cams=cams, center0=center))
-        items.append(dict(oid=oid, info=info, part=part, hull=hull, cue_region=cue_region, variants=variants))
+        items.append(dict(oid=oid, info=info, part=part, hull=hull, cue_region=cue_region, variants=variants,
+                          contrast=contrast))
     scene.build()
     for _ in range(600):
         scene.step()
@@ -72,7 +74,7 @@ def main():
         oid, part = it['oid'], it['part']
         rec = dict(category=it['info']['category'], mass_kg=it['info']['mass_kg'],
                    extent_mm=np.round(np.array(it['info']['extent_m'])*1000).tolist(),
-                   strength_range_N=it['info']['strength_range_N'], cue_region=it['cue_region'],
+                   strength_range_N=it['info']['strength_range_N'], cue_region=it['cue_region'], cue_contrast=it['contrast'],
                    contactable=np.flatnonzero(part.contactable()).tolist(), regions=part.to_json(), views={})
         for name, v in zip(('plain', 'cue'), it['variants']):
             ent = v['entity']

@@ -119,7 +119,7 @@ def region_spec(oid: str, root: Path = ASSETS) -> dict:
 
 
 def paint_cue(oid: str, part, region: int, out_dir: Path, root: Path = ASSETS, style: Optional[str] = None,
-              strength: float = .75, seed: int = 0) -> Path:
+              strength: float = .9, seed: int = 0) -> Path:
     """Copy of the textured OBJ whose texture is marked inside `region` (regions.Partition computed on
     regions.object_mesh(region_spec(oid)), i.e. the same object frame). Returns the new OBJ path.
 
@@ -145,14 +145,25 @@ def paint_cue(oid: str, part, region: int, out_dir: Path, root: Path = ASSETS, s
     mask = mask.filter(ImageFilter.GaussianBlur(2))
     rng = np.random.default_rng(seed)
     arr = np.asarray(tex).astype(np.float32)
-    a = (np.asarray(mask).astype(np.float32)/255.)[..., None]*strength
+    m01 = np.asarray(mask).astype(np.float32)/255.
+    a = m01[..., None]*strength
+    inside = m01 > .5
+    base = arr[inside].mean(0) if inside.any() else arr.reshape(-1, 3).mean(0)
+    lum = float(base@[.299, .587, .114])/255.
+    # The mark must stand out from this object's own colour: dark mark on light surfaces,
+    # pale mark (mould / scuff) on dark ones (plum, brick, deep red).
     if style == 'bruise':
-        colour = np.array([70., 45., 25.])+rng.normal(0, 5, 3)
+        colour = (np.array([75., 45., 20.]) if lum > .35 else np.array([205., 195., 160.]))+rng.normal(0, 5, 3)
         noise = rng.normal(1., .08, arr.shape[:2])[..., None]
         arr = arr*(1-a)+colour*noise*a
-    else:   # crease: darken with streaks
+    else:   # crease: streaked mark, darker on light surfaces, lighter on dark ones
         streak = (np.sin(np.arange(W)[None, :]/3.+rng.uniform(0, 6))*.5+.5)[..., None]
-        arr = arr*(1-a*(.55+.35*streak))
+        target = np.array([40., 35., 30.]) if lum > .35 else np.array([215., 210., 200.])
+        k = a*(.65+.3*streak)
+        arr = arr*(1-k)+target*k
+    after = arr[inside].mean(0) if inside.any() else base
+    paint_cue.last_contrast = dict(base_rgb=base.round(1).tolist(), mark_rgb=after.round(1).tolist(),
+                                   delta_luma=round(float((after-base)@[.299, .587, .114])/255., 3))
     out_dir.mkdir(parents=True, exist_ok=True)
     stem = f'{oid}_cue_r{region}'
     Image.fromarray(arr.clip(0, 255).astype(np.uint8)).save(out_dir/f'{stem}.png')
