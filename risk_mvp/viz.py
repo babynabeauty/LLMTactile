@@ -34,9 +34,13 @@ def grid_heatmap(rows, path: Path, title: str):
                 txt = f"ok\n{r['drift_mm']:.1f}mm"
             else:
                 img[i, j] = 0 if r['pre_touch'] else 1
-                why = ('touch' if r['pre_touch'] else 'finger' if min(r['hold_contact_frac'].values()) <= .95
-                       else 'lift' if r['lift_m'] <= .035 else 'slip')
-                txt = why
+                if r['pre_touch']:
+                    txt = 'touch'
+                elif r.get('first_loss') and r['first_loss'][0]:
+                    f, ph = r['first_loss']
+                    txt = f"{f}\n{ph.replace('lost during ', '').replace('never touched', 'missed')}"
+                else:
+                    txt = 'lift' if r['lift_m'] <= .035 else 'slip'
             ax.text(j, i, txt, ha='center', va='center', fontsize=7)
         ax.imshow(img, origin='lower', cmap='RdYlGn', vmin=0, vmax=2)
         ax.set_xticks(range(len(dxs)), [f'{v*1000:+.1f}' for v in dxs], fontsize=7)

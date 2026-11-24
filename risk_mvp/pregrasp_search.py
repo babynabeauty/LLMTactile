@@ -48,7 +48,7 @@ def grid(dx=(-.015, -.0075, 0., .0075, .015), dy=(-.01, 0., .01), dz=(-.015, 0.,
     return np.array(list(itertools.product(dx, dy, dz)))
 
 
-def run_episode(sc, spec, offsets, on_phase_end=None):
+def run_episode(sc, spec, offsets, on_phase_end=None, targets=None):
     """Run the pregrasp episode on every env of `sc` (offsets (E,3) added to the palm offset).
     Returns per-env results and the per-tick force log."""
     from risk_mvp.force_ctrl import BatchForceController, FINGER_JOINTS
@@ -63,7 +63,9 @@ def run_episode(sc, spec, offsets, on_phase_end=None):
     center0, _ = sc.object_pose()
     align = center0+palm_offset+offsets
     pre = align+np.array([0, 0, .12])
+    targets = dict(TARGET_N, **(targets or {}))
     log = dict(t=[], phase=[], **{f: [] for f in FINGERS})
+    has_log = {f: [] for f in FINGERS}          # (ticks, E) contact flags, for the failure phase
     tick = [0]
 
     def record(c, phase):
@@ -71,6 +73,7 @@ def run_episode(sc, spec, offsets, on_phase_end=None):
         log['phase'].append(phase)
         for f in FINGERS:
             log[f].append(c[f]['fn'].copy())
+            has_log[f].append(c[f]['has'].copy())
         tick[0] += 1
 
     def step(tgt, phase, c=None):
@@ -122,18 +125,20 @@ def run_episode(sc, spec, offsets, on_phase_end=None):
         tgt = sc.target.copy()
         for f in FINGERS:
             cols = sc.finger_cols[f]
-            qt, _ = ctrl[f].step(np.full(E, TARGET_N[f]), q[:, cols], sc.kp_env[:, cols], sc.effort[cols],
+            qt, _ = ctrl[f].step(np.full(E, targets[f]), q[:, cols], sc.kp_env[:, cols], sc.effort[cols],
                                  sc.lower[cols], sc.upper[cols], J[f][0], J[f][1], c[f]['point'], c[f]['normal'],
                                  c[f]['fn'], c[f]['has'], np.tile(closed_h[closed_cols[f]], (E, 1)))
             tgt[:, cols] = qt
         return tgt, c
 
+    obj_pre_close, _ = sc.object_pose()
     for _ in range(PHASE_TICKS['close']):
         tgt, c = hand_tick()
         step(tgt, 'close', c)
     if on_phase_end:
         on_phase_end('close')
     obj_before, _ = sc.object_pose()
+    close_shift = np.linalg.norm(obj_before-obj_pre_close, axis=1)
     q_lift, _ = sc.ik(align+sag+np.array([0, 0, .05]), quat)
     move_arm(sc.target[:, :6].copy(), q_lift, PHASE_TICKS['lift'], 'lift', hand_fn=hand_tick)
     hold, rel = [], []
@@ -151,6 +156,22 @@ def run_episode(sc, spec, offsets, on_phase_end=None):
     lift_h = p_end[:, 2]-obj_before[:, 2]
     drift = np.linalg.norm(rel[-1][0]-rel[0][0], axis=1)
     rot = np.degrees(np.arccos(np.clip((np.einsum('eij,eij->e', rel[-1][1], rel[0][1])-1)/2, -1, 1)))
+    phases = np.array(log['phase'])
+    H = {f: np.array(has_log[f]) for f in FINGERS}            # (T, E)
+    close_end = np.flatnonzero(phases == 'close')[-1]
+
+    def first_loss(e):
+        """(finger, phase) of the first finger that never touched by the end of close or lost contact after."""
+        for f in FINGERS:
+            if not H[f][close_end, e]:
+                return f, ('never touched' if not H[f][:close_end+1, e].any() else 'lost during close')
+        after = np.arange(close_end+1, len(phases))
+        for t in after:
+            for f in FINGERS:
+                if not H[f][t, e]:
+                    return f, f'lost during {phases[t]}'
+        return None, None
+
     rows = []
     for e in range(E):
         fn = {f: float(np.mean([h[f]['fn'][e] for h in hold])) for f in FINGERS}
@@ -168,21 +189,22 @@ def run_episode(sc, spec, offsets, on_phase_end=None):
                          table_robot_N=float(np.mean([h['table_robot_N'][e] for h in hold])),
                          palm_obj_N=float(np.mean([h['other_robot_obj_N'][e] for h in hold])),
                          ik_err_pre=float(np.linalg.norm(err_pre[e, :3])), ik_err_align=float(np.linalg.norm(err_al[e, :3])),
-                         sag_mm=(sag[e]*1000).round(2).tolist()))
-    meta = dict(palm_offset_base_m=palm_offset.tolist(), palm_quaternion_wxyz=spec['palm_quaternion_wxyz'],
+                         sag_mm=(sag[e]*1000).round(2).tolist(),
+                         first_loss=first_loss(e), close_shift_mm=float(close_shift[e]*1000)))
+    meta = dict(targets_N=targets, palm_offset_base_m=palm_offset.tolist(), palm_quaternion_wxyz=spec['palm_quaternion_wxyz'],
                 open_hand_rad=open_h.tolist(), closed_hand_rad=closed_h.tolist(), grip_gain=spec.get('grip_gain', 1.))
     return rows, log, meta
 
 
-def run_object(oid, out_dir, backend='gpu', k_regions=5):
+def run_object(oid, out_dir, backend='gpu', k_regions=5, offsets=None, targets=None):
     from risk_mvp.scene import GraspScene
     from risk_mvp.regions import object_mesh, partition
     from risk_mvp import objects as O, viz
     spec = json.loads(TEMPLATE.read_text())
-    offsets = grid()
+    offsets = grid() if offsets is None else offsets
     t0 = time.time()
     sc = GraspScene(oid, len(offsets), backend=backend)
-    rows, _, meta = run_episode(sc, spec, offsets)
+    rows, _, meta = run_episode(sc, spec, offsets, targets=targets)
     succ = [r for r in rows if r['success']]
     best = min(succ, key=lambda r: (r['drift_mm']+r['rot_deg']/5, abs(np.array(r['offset_m'])).sum())) if succ else None
     res = dict(object=oid, n_envs=len(offsets), search_wall_s=time.time()-t0, **meta, n_success=len(succ),
@@ -204,7 +226,7 @@ def run_object(oid, out_dir, backend='gpu', k_regions=5):
             frames.append(img)
             labels.append(f'{phase} (view {v})')
     snap('start')
-    _, log, _ = run_episode(rs, spec, np.array([pick['offset_m']]), on_phase_end=snap)
+    _, log, _ = run_episode(rs, spec, np.array([pick['offset_m']]), on_phase_end=snap, targets=targets)
     rs.cams[0].stop_recording()
     order = list(range(0, len(frames), 2))+list(range(1, len(frames), 2))   # row 1: view 0, row 2: view 1
     viz.keyframes([frames[i] for i in order], [labels[i] for i in order], out_dir/f'{oid}_best_frames.png',
@@ -212,10 +234,20 @@ def run_object(oid, out_dir, backend='gpu', k_regions=5):
     starts = [(log['t'][i], p) for i, p in enumerate(log['phase']) if i == 0 or log['phase'][i-1] != p]
     viz.force_trace(log['t'], {f: np.array(log[f])[:, 0] for f in FINGERS}, starts, out_dir/f'{oid}_best_forces.png',
                     f'{oid}: replay of {"best" if best else "least-bad"} pose offset {np.round(np.array(pick["offset_m"])*1000, 1).tolist()} mm',
-                    targets=TARGET_N)
+                    targets=meta['targets_N'])
     res['replayed'] = dict(offset_m=pick['offset_m'], was_success=bool(best))
     res['held_frame'] = frames[-2]
     return res
+
+
+def _count_losses(envs):
+    out = {}
+    for e in envs:
+        f, ph = e['first_loss']
+        if f:
+            k = f'{f}: {ph}'
+            out[k] = out.get(k, 0)+1
+    return dict(sorted(out.items(), key=lambda kv: -kv[1]))
 
 
 def main():
@@ -223,6 +255,11 @@ def main():
     ap.add_argument('--out', type=Path, default=ROOT/'outputs/risk_mvp/pregrasp')
     ap.add_argument('--objects', nargs='*', default=None)
     ap.add_argument('--backend', default='gpu')
+    ap.add_argument('--dx', type=float, nargs='+', default=[-15, -7.5, 0, 7.5, 15], help='mm')
+    ap.add_argument('--dy', type=float, nargs='+', default=[-10, 0, 10], help='mm')
+    ap.add_argument('--dz', type=float, nargs='+', default=[-15, 0, 15], help='mm')
+    ap.add_argument('--target', type=float, nargs=3, default=None, metavar=('THUMB', 'INDEX', 'MIDDLE'),
+                    help='close/hold normal force targets in N (default 2 1 1)')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     from risk_mvp import objects as O, viz
@@ -233,7 +270,9 @@ def main():
     held = []
     for oid in ids:
         try:
-            r = run_object(oid, a.out, a.backend)
+            offs = grid(*(np.array(v)/1000 for v in (a.dx, a.dy, a.dz)))
+            tg = dict(zip(FINGERS, a.target)) if a.target else None
+            r = run_object(oid, a.out, a.backend, offsets=offs, targets=tg)
             held.append((r.pop('held_frame'), f"{oid}: {r['n_success']}/{r['n_envs']}"))
             (a.out/f'{oid}.json').write_text(json.dumps(r, indent=1)+'\n')
             summary[oid] = dict(n_success=r['n_success'], of=r['n_envs'], best=r['best'], wall_s=r['search_wall_s'],
@@ -241,7 +280,9 @@ def main():
                                     pre_touch=sum(e['pre_touch'] for e in r['envs']),
                                     lost_finger=sum(min(e['hold_contact_frac'].values()) <= .95 for e in r['envs']),
                                     low_lift=sum(e['lift_m'] <= .035 for e in r['envs']),
-                                    drift=sum(e['drift_mm'] >= 3 or e['rot_deg'] >= 10 for e in r['envs'])))
+                                    drift=sum(e['drift_mm'] >= 3 or e['rot_deg'] >= 10 for e in r['envs'])),
+                                first_loss=_count_losses(r['envs']),
+                                close_shift_mm_median=float(np.median([e['close_shift_mm'] for e in r['envs']])))
         except Exception as exc:
             import traceback
             summary[oid] = dict(error=f'{type(exc).__name__}: {exc}', trace=traceback.format_exc()[-3000:])
