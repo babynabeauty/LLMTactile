@@ -42,6 +42,10 @@ TEMPLATE_HALF_X = .045/2
 FINGERS = ('thumb', 'index', 'middle')
 TARGET_N = dict(thumb=2., index=1., middle=1.)
 TOUCH_N, RAMP_TICKS = .2, 20
+
+
+def cpu_np(x):
+    return x.detach().cpu().numpy() if hasattr(x, 'detach') else np.asarray(x)
 CAMERAS = [dict(offset=(.20, -.30, .16)), dict(offset=(-.05, -.34, .06), lookat_offset=(-.02, 0, .03))]
 PHASE_TICKS = dict(settle=10, approach=120, descend=60, correct=30, close=120, lift=60, hold=120)
 
@@ -50,7 +54,7 @@ def grid(dx=(-.015, -.0075, 0., .0075, .015), dy=(-.01, 0., .01), dz=(-.015, 0.,
     return np.array(list(itertools.product(dx, dy, dz)))
 
 
-def run_episode(sc, spec, offsets, on_phase_end=None, targets=None):
+def run_episode(sc, spec, offsets, on_phase_end=None, targets=None, stop_after_close=False):
     """Run the pregrasp episode on every env of `sc` (offsets (E,3) added to the palm offset).
     Returns per-env results and the per-tick force log."""
     from risk_mvp.force_ctrl import BatchForceController, FINGER_JOINTS
@@ -152,6 +156,16 @@ def run_episode(sc, spec, offsets, on_phase_end=None, targets=None):
         step(tgt, 'close', c)
     if on_phase_end:
         on_phase_end('close')
+    if stop_after_close:
+        # state at the end of the close (used by snapshot.py): every finger at its target, object on the table
+        c = sc.finger_contacts()
+        p, R = sc.object_pose()
+        return dict(q=sc.q(), target=sc.target.copy(), kp=sc.kp_env.copy(),
+                    obj_pos_file=cpu_np(sc.obj.get_pos()).reshape(E, 3), obj_quat=cpu_np(sc.obj.get_quat()).reshape(E, 4),
+                    obj_center=p, obj_R=R, all_touch_tick=all_touch_tick.copy(),
+                    contacts={f: dict(fn=c[f]['fn'], has=c[f]['has'],
+                                      point_obj=np.einsum('eji,ej->ei', R, c[f]['point']-p),
+                                      normal_obj=np.einsum('eji,ej->ei', R, c[f]['normal'])) for f in FINGERS})
     obj_before, _ = sc.object_pose()
     close_shift = np.linalg.norm(obj_before-obj_pre_close, axis=1)
     q_lift, _ = sc.ik(align+sag+np.array([0, 0, .05]), quat)

@@ -128,6 +128,24 @@ class GraspScene:
         self.obj.set_friction_ratio(np.tile(ratio, (1, self.obj.n_links)), np.arange(self.obj.n_links))
         self.robot.set_friction_ratio(np.tile(ratio, (1, self.robot.n_links)), np.arange(self.robot.n_links))
 
+    def set_mass(self, mass_kg):
+        self.obj.set_mass(np.broadcast_to(np.asarray(mass_kg, float), (self.E,)).copy())
+
+    def restore(self, snap: dict):
+        """Put every env into a snapshot.py state (one grasp, already touching), zero velocities."""
+        self.scene.reset()
+        q = np.tile(np.asarray(snap['q'], float), (self.E, 1))
+        self.robot.set_dofs_position(q, self.idx, zero_velocity=True)
+        self.target = np.tile(np.asarray(snap['target'], float), (self.E, 1))
+        self.robot.control_dofs_position(self.target, self.idx)
+        self.robot.set_dofs_kp(np.tile(np.asarray(snap['kp'], float), (self.E, 1)), self.idx)
+        self.kp_env = np.tile(np.asarray(snap['kp'], float), (self.E, 1))
+        kv = np.tile(self.kv, (self.E, 1))
+        kv[:, 6:] *= np.sqrt(self.kp_env[:, 6:]/self.kp[6:])
+        self.robot.set_dofs_kv(kv, self.idx)
+        self.obj.set_quat(np.tile(np.asarray(snap['obj_quat'], float), (self.E, 1)), zero_velocity=True)
+        self.obj.set_pos(np.tile(np.asarray(snap['obj_pos_file'], float), (self.E, 1)), zero_velocity=True)
+
     def set_joint_friction(self, frictionloss_Nm):
         f = np.broadcast_to(np.asarray(frictionloss_Nm, float), (self.E,))
         self.robot.set_dofs_frictionloss(np.repeat(f[:, None], 12, 1), self.hand_idx)
