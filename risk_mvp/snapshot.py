@@ -27,18 +27,51 @@ FINGERS = ('thumb', 'index', 'middle')
 K_REGIONS = 5
 
 
+def swap_window(points, mass=.15, mu=.5, safety=2., margin=.1, mass_margin=.1):
+    """How well a three-finger contact set suits the swap experiment, from the allocator itself.
+    Horizontal radial normals are assumed (snapshot normals of side grasps match them closely).
+    Returns (equal_force, w_index, w_middle): the index/middle force of the risk-blind equal split, and for
+    each side the lowest weak-region threshold the oracle allocation can still respect. A good grasp has
+    both w_* well below equal_force (room to move load away from either side)."""
+    from risk_mvp.allocator import Allocator, Contacts, gravity_wrench
+    pos = np.array([points[f] for f in FINGERS], float)
+    nrm = -pos.copy()
+    nrm[:, 2] = 0
+    nrm /= np.maximum(np.linalg.norm(nrm, axis=1, keepdims=True), 1e-9)
+    C = Contacts(pos, nrm, np.array([0, 1, 2]), list(FINGERS))
+    w = gravity_wrench(mass*(1+mass_margin), np.eye(3))
+    eq = Allocator(C, 3, mode='equal').solve(w, mu=mu, fmax=8., margin=margin, safety=safety)
+    if not eq['feasible']:
+        return np.inf, np.inf, np.inf
+    out = []
+    for reg in (1, 2):
+        lo, hi = 0., 8.
+        for _ in range(12):          # bisection on the weak threshold
+            mid = (lo+hi)/2
+            lim = np.full(3, 8.)
+            lim[reg] = mid
+            ok = Allocator(C, 3, mode='oracle').solve(w, mu=mu, fmax=8., margin=margin, safety=safety, limit=lim)['feasible']
+            lo, hi = (lo, mid) if ok else (mid, hi)
+        out.append(hi)
+    return eq['finger_normal']['index'], out[0], out[1]
+
+
 def candidate_offsets(search_json: dict):
-    """Successful poses first, the most symmetric first (thumb opposite the midpoint of index and middle,
-    so both sides of the swap experiment have room to move load), then the three-finger touches."""
-    def asym(e):
+    """Successful poses ranked by the swap window (worst side's room to move load, relative to the
+    equal split), then the three-finger touches. Picking by the thumb sitting between the fingers in y
+    alone chose poses where thumb and index both pushed sideways and the allocator needed 3x the force."""
+    def score(e):
         p = e['contact_obj_m']
         if not all(f in p for f in FINGERS):
-            return 1.
-        return abs(p['thumb'][1]-(p['index'][1]+p['middle'][1])/2)
-    succ = sorted([e for e in search_json['envs'] if e['success']], key=lambda e: (asym(e), e['drift_mm']))
-    out = [(e['offset_m'], f'successful pose, thumb offset from the finger midpoint {asym(e)*1000:.1f} mm') for e in succ]
+            return np.inf, None
+        eqf, wi, wm = swap_window(p)
+        return max(wi, wm)/max(eqf, 1e-6), (eqf, wi, wm)
+    succ = [(score(e), e) for e in search_json['envs'] if e['success']]
+    succ.sort(key=lambda x: (x[0][0], x[1]['drift_mm']))
+    out = [(e['offset_m'], 'successful pose, equal split %.2f N, oracle keeps weak index <= %.2f N, weak middle <= %.2f N'
+            % sc[1]) for sc, e in succ if sc[1] is not None]
     touched = sorted([e for e in search_json['envs'] if e.get('all_touch_s') is not None and not e['pre_touch']
-                      and not e['success']], key=lambda e: (e['close_shift_mm'], asym(e)))
+                      and not e['success']], key=lambda e: e['close_shift_mm'])
     out += [(e['offset_m'], 'three-finger touch without a successful lift') for e in touched]
     if not out:
         raise RuntimeError('no env of the search reached a three-finger touch')
