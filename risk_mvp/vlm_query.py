@@ -48,10 +48,10 @@ Visible region numbers: {seen}.
 Judge from what you can see (shape, material, wall thickness, colour, marks, bruises, creases, dents)
 how much squeezing force each visible region can take before it is damaged, RELATIVE to the rest of this
 object: "fragile" (clearly weaker than the rest), "normal", or "strong" (clearly stronger than the rest).
-Most regions of an undamaged uniform object are "normal". Then judge the whole object: "fragile" (e.g.
-ripe soft fruit, thin plastic cup: damaged around 0.5-2 N of fingertip force), "normal" (around 2-5 N),
-or "strong" (e.g. foam brick, tennis ball: 5-10 N or more), and give the fingertip force range in newtons
-you expect it to take without damage.
+Most regions of an undamaged uniform object are "normal". Then judge the whole object by the fingertip
+force at which you expect it to be damaged: "fragile" (below about 2 N), "normal" (about 2-5 N) or
+"strong" (above about 5 N), and give the fingertip force range in newtons you expect it to take without
+damage. Decide from what you see; do not default to the middle class.
 
 Answer with JSON only, no other text, exactly this shape:
 {{"object": {{"name": "<what the object is>", "material": "<material>", "strength": "fragile|normal|strong",
@@ -74,7 +74,9 @@ SCHEMA = {
             'properties': {'id': {'type': 'integer'}, 'label': {'type': 'string', 'enum': list(LABELS)},
                            'confidence': {'type': 'number'}, 'reason': {'type': 'string'}}}}}}
 
-# what the category should be called at the object level (objects.CATEGORIES)
+# what the category should be called at the object level (objects.CATEGORIES). The prompt defines the
+# classes by force only: an earlier prompt named example objects matching these categories (soft fruit, thin
+# cup, foam brick, tennis ball), so the object-level answer could be copied from the prompt.
 EXPECTED_OBJECT = {'soft_fruit': 'fragile', 'firm_fruit': 'normal', 'thin_cup': 'fragile', 'sturdy': 'strong'}
 
 
