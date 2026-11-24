@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import sys
 import tarfile
+import urllib.error
 import urllib.request
 from pathlib import Path
 from typing import Optional
@@ -48,6 +49,36 @@ CATALOG = {
 }
 
 
+def fetch(url: str, dst: Path, tries: int = 8, chunk: int = 1 << 16):
+    """Download with resume (HTTP Range) and retries; checks the final size against Content-Length."""
+    import time
+    part = dst.with_suffix(dst.suffix+'.part')
+    total = None
+    for attempt in range(tries):
+        have = part.stat().st_size if part.exists() else 0
+        req = urllib.request.Request(url, headers={'Range': f'bytes={have}-'} if have else {})
+        try:
+            with urllib.request.urlopen(req, timeout=60) as r:
+                if r.status == 200 and have:      # server ignored the range: start over
+                    have = 0
+                    part.unlink()
+                length = int(r.headers.get('Content-Length', 0))
+                total = have+length if length else total
+                with part.open('ab') as f:
+                    while True:
+                        buf = r.read(chunk)
+                        if not buf:
+                            break
+                        f.write(buf)
+            if total is None or part.stat().st_size >= total:
+                part.rename(dst)
+                return
+        except (OSError, urllib.error.URLError) as exc:
+            print(f'  retry {attempt+1}/{tries} after {type(exc).__name__}: {exc}', flush=True)
+        time.sleep(min(2**attempt, 30))
+    raise RuntimeError(f'download failed after {tries} tries: {url}')
+
+
 def download(ids=None, root: Path = ASSETS):
     root.mkdir(parents=True, exist_ok=True)
     for oid in ids or CATALOG:
@@ -56,7 +87,7 @@ def download(ids=None, root: Path = ASSETS):
             continue
         tgz = root/f'{oid}.tgz'
         print('downloading', oid, flush=True)
-        urllib.request.urlretrieve(URL.format(oid), tgz)
+        fetch(URL.format(oid), tgz)
         with tarfile.open(tgz) as t:
             members = [m for m in t.getmembers() if m.name.startswith(f'{oid}/google_16k/')
                        and '..' not in Path(m.name).parts and (m.isfile() or m.isdir())]
