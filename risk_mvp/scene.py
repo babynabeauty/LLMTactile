@@ -48,7 +48,10 @@ def quat_to_mat(q):
 
 class GraspScene:
     def __init__(self, oid: str, n_envs: int, mesh_path: Optional[str] = None, mass_kg: Optional[float] = None,
-                 armature: float = .003, backend: str = 'gpu', seed: int = 0):
+                 armature: float = .003, backend: str = 'gpu', seed: int = 0, cameras: Sequence[dict] = (),
+                 cam_res=(640, 480)):
+        """cameras: dicts with 'offset' (camera position relative to the object's start centre) and optional
+        'lookat_offset', 'fov'; rendered for env 0 (use n_envs=1 for replays)."""
         import genesis as gs
         self.gs = gs
         if not gs._initialized:
@@ -77,6 +80,9 @@ class GraspScene:
                                                    pos=tuple(self.center0+self.offset), convexify=True),
                                     material=gs.materials.Rigid(rho=rho, friction=BASE_FRICTION))
         self.scene = scene
+        self.cams = [scene.add_camera(res=cam_res, pos=tuple(self.center0+np.asarray(c['offset'])),
+                                      lookat=tuple(self.center0+np.asarray(c.get('lookat_offset', (0, 0, .03)))),
+                                      fov=c.get('fov', 40), GUI=False) for c in cameras]
         scene.build(n_envs=n_envs)
 
         r = self.robot
@@ -138,6 +144,14 @@ class GraspScene:
         R = quat_to_mat(q)
         self.obj.set_quat(q, zero_velocity=True)
         self.obj.set_pos(c+np.einsum('eij,j->ei', R, self.offset), zero_velocity=True)
+
+    def render(self):
+        """RGB images (H, W, 3) uint8 from every camera."""
+        out = []
+        for cam in self.cams:
+            rgb = cam.render(rgb=True)[0]
+            out.append(np.asarray(cpu(rgb))[..., :3].astype(np.uint8))
+        return out
 
     # ------------------------------------------------------------------ state
     def object_pose(self):
