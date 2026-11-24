@@ -21,7 +21,13 @@ if args[:2] == ['exec', '--help']:
           "  -s, --sandbox <MODE>\n  --skip-git-repo-check\n  --output-schema <FILE>\n"
           "  -o, --output-last-message <FILE>")
     sys.exit(0)
-assert args[0] == 'exec' and '--image' in args and '--output-schema' in args
+if os.environ.get('FAKE_MODE') == 'old':
+    print('ERROR: {"type":"error","status":400,"error":{"message":"The model requires a newer version of Codex."}}')
+    sys.exit(1)
+if '--image' not in args:          # preflight
+    print('ok')
+    sys.exit(0)
+assert args[0] == 'exec' and '--output-schema' in args
 img = args[args.index('--image')+1]
 assert os.path.isabs(img) and os.path.exists(img)
 json.load(open(args[args.index('--output-schema')+1]))
@@ -82,3 +88,16 @@ def test_end_to_end_with_fake_codex(tmp_path, mode):
     assert labels['cupx/plain']['regions']['0']['label'] == 'normal'
     assert cue['object']['strength'] == 'fragile' and cue['object']['safe_force_N'] == [0.5, 2.0]
     assert (out/'vlm_labels.png').exists() and (out/'cupx_cue.json').exists()
+
+
+def test_preflight_stops_an_old_codex(tmp_path):
+    codex = tmp_path/'codex'
+    codex.write_text(FAKE)
+    codex.chmod(codex.stat().st_mode | stat.S_IEXEC)
+    img = tmp_path/'imgs'
+    img.mkdir()
+    (img/'summary.json').write_text(json.dumps({}))
+    env = dict(os.environ, FAKE_MODE='old')
+    r = subprocess.run([sys.executable, str(ROOT/'risk_mvp/vlm_query.py'), '--images', str(img), '--out',
+                        str(tmp_path/'out'), '--codex', str(codex)], capture_output=True, text=True, env=env, timeout=120)
+    assert r.returncode != 0 and 'newer codex CLI' in r.stderr, r.stdout+r.stderr

@@ -134,6 +134,44 @@ def ask(codex: str, flags: set, image: Path, prompt: str, model=None, timeout=60
         return text
 
 
+def preflight(codex: str, flags: set, model=None, effort=None, timeout=180, log: Path = None):
+    """One small text-only call before the real ones, so a codex that cannot answer (no network, a CLI
+    too old for the configured model, not logged in) stops the run at once with its own message."""
+    cmd = [codex, 'exec']
+    if '--skip-git-repo-check' in flags:
+        cmd.append('--skip-git-repo-check')
+    if '--sandbox' in flags:
+        cmd += ['--sandbox', 'read-only']
+    if model:
+        cmd += ['--model', model] if '--model' in flags else ['-m', model]
+    if effort and ('--config' in flags or '-c' in flags):
+        cmd += ['-c', f'model_reasoning_effort="{effort}"']
+    cmd.append('Reply with the single word: ok')
+    with tempfile.TemporaryDirectory() as td:
+        try:
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, cwd=td, stdin=subprocess.DEVNULL)
+            text = r.stdout+r.stderr
+        except subprocess.TimeoutExpired as exc:
+            text = ((exc.stdout or b'').decode(errors='replace') if isinstance(exc.stdout, bytes) else (exc.stdout or '')) + \
+                   ((exc.stderr or b'').decode(errors='replace') if isinstance(exc.stderr, bytes) else (exc.stderr or ''))
+            r = None
+    if log:
+        log.write_text(' '.join(cmd)+'\n\n'+text)
+    failed = r is None or r.returncode != 0 or '"type":"error"' in text or 'requires a newer version' in text
+    if failed:
+        hint = ''
+        if 'requires a newer version of Codex' in text:
+            hint = ('\n-> the configured model needs a newer codex CLI: upgrade codex, or pass --model with a model '
+                    'this codex supports')
+        elif 'Reconnecting' in text or r is None:
+            hint = '\n-> codex cannot reach the server: check the network / proxy (https_proxy) in this shell'
+        elif 'login' in text.lower() or '401' in text:
+            hint = '\n-> codex is not logged in: run codex login'
+        tail = '\n'.join(text.strip().splitlines()[-12:])
+        raise SystemExit(f'codex preflight failed ({"timeout" if r is None else f"exit {r.returncode}"}):\n{tail}{hint}')
+    print('codex preflight ok', flush=True)
+
+
 def parse_answer(text: str, seen: list) -> dict:
     """JSON object from the answer (the last {...} block if there is extra text), checked and cleaned:
     labels in LABELS, confidences clipped to [0, 1], only visible region ids, one entry per id."""
@@ -254,6 +292,7 @@ def main():
     ap.add_argument('--codex', default=shutil.which('codex') or '/usr/local/bin/codex')
     ap.add_argument('--model', default=None, help='codex model (default: codex config)')
     ap.add_argument('--timeout', type=int, default=600, help='seconds per codex call')
+    ap.add_argument('--no-preflight', action='store_true', help='skip the one text-only test call')
     ap.add_argument('--effort', default=None, help='codex reasoning effort, e.g. low / medium (default: codex config)')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
@@ -279,6 +318,8 @@ def main():
 
     logs = a.out/'logs'
     logs.mkdir(exist_ok=True)
+    if not a.no_preflight:
+        preflight(a.codex, flags, a.model, a.effort, log=logs/'preflight.log')
     print(f'{len(jobs)} codex calls, {a.jobs} at a time; each can take a few minutes. '
           f'Live codex output: tail -f {logs}/<object>_<variant>_<repeat>.log', flush=True)
     t0 = time.time()
