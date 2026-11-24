@@ -44,7 +44,7 @@ class TrialConfig:
     eps: float = .05              # damage budget for the risk mode
     mass_margin: float = .1
     fmax_N: float = 8.
-    touch_N: float = .2
+    touch_N: float = .5            # snapshot touch force (snapshot.py --touch)
     preload_ticks: int = 30
     lift_ticks: int = 60
     hold_ticks: int = 120

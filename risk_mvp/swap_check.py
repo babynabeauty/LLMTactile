@@ -59,6 +59,9 @@ def main():
     from risk_mvp.regions import object_mesh, partition
     from risk_mvp.scene import GraspScene
     snap = json.loads((a.snapshots/f'{a.object}.json').read_text())
+    if not all(snap.get('touching_after_settle', {}).values()):
+        raise SystemExit(f"{a.object}: not all three fingers touch in the snapshot {snap.get('touching_after_settle')}; "
+                         'rerun snapshot.py or pick an object whose snapshot touches with all three')
     part = partition(object_mesh(O.region_spec(a.object)), snap['k_regions'], seed=snap['partition_seed'],
                      separate=snap['partition_separate'])
     region_of = {f: snap['contacts'][f]['region'] for f in FINGERS}

@@ -2,7 +2,7 @@
 
 For each object the palm offset comes from the pregrasp search (best successful env, or for an object
 without one, the env that reached a three-finger touch with the least object push). The grasp is closed
-in a one-env scene with all three targets at the light touch force (0.2 N) and the state at the end of the
+in a one-env scene with index/middle at --touch (default 0.5 N) and the thumb at twice that and the state at the end of the
 close is saved: joint positions/targets/gains, object pose, contact points and normals in the object frame.
 The object regions are then partitioned with the index and middle contacts forced into different regions
 (the swap experiment puts the weak spot under one of them).
@@ -43,10 +43,11 @@ def main():
     ap.add_argument('--out', type=Path, default=ROOT/'outputs/risk_mvp/snapshots')
     ap.add_argument('--objects', nargs='*', default=None)
     ap.add_argument('--backend', default='gpu')
+    ap.add_argument('--touch', type=float, default=.5, help='index/middle force at the snapshot (thumb twice), N')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     from risk_mvp import objects as O, viz
-    from risk_mvp.pregrasp_search import TEMPLATE, TOUCH_N, CAMERAS, run_episode
+    from risk_mvp.pregrasp_search import TEMPLATE, CAMERAS, run_episode
     from risk_mvp.regions import object_mesh, partition
     from risk_mvp.scene import GraspScene, cpu
     spec = json.loads(TEMPLATE.read_text())
@@ -56,15 +57,12 @@ def main():
             sj = json.loads((a.search/f'{oid}.json').read_text())
             offset, why = pick_offset(sj)
             sc = GraspScene(oid, 1, backend=a.backend, cameras=CAMERAS)
-            st = run_episode(sc, spec, np.array([offset]), targets={f: TOUCH_N for f in FINGERS},
+            t_touch = a.touch
+            st = run_episode(sc, spec, np.array([offset]), targets=dict(thumb=2*t_touch, index=t_touch, middle=t_touch),
                              stop_after_close=True)
-            for _ in range(20):          # settle at the touch force
-                sc.step(sc.target)
-            # contacts averaged over the last 10 settle ticks (point/normal of a single tick can be degenerate)
-            hist = []
-            for _ in range(10):
-                sc.step(sc.target)
-                hist.append(sc.finger_contacts())
+            # state at the end of the force-controlled close (force control still active, no position-only
+            # settle); contacts averaged over its last 10 ticks
+            hist = st['close_hist']
             c = hist[-1]
             touching = {f: bool(all(h[f]['has'][0] for h in hist)) for f in FINGERS}
             p_o, R_o = sc.object_pose()

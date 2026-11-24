@@ -151,16 +151,18 @@ def run_episode(sc, spec, offsets, on_phase_end=None, targets=None, stop_after_c
         return tgt, c
 
     obj_pre_close, _ = sc.object_pose()
+    close_hist = []
     for _ in range(PHASE_TICKS['close']):
         tgt, c = hand_tick()
         step(tgt, 'close', c)
+        close_hist = (close_hist+[c])[-10:]
     if on_phase_end:
         on_phase_end('close')
     if stop_after_close:
         # state at the end of the close (used by snapshot.py): every finger at its target, object on the table
         c = sc.finger_contacts()
         p, R = sc.object_pose()
-        return dict(q=sc.q(), target=sc.target.copy(), kp=sc.kp_env.copy(),
+        return dict(q=sc.q(), target=sc.target.copy(), kp=sc.kp_env.copy(), close_hist=close_hist,
                     obj_pos_file=cpu_np(sc.obj.get_pos()).reshape(E, 3), obj_quat=cpu_np(sc.obj.get_quat()).reshape(E, 4),
                     obj_center=p, obj_R=R, all_touch_tick=all_touch_tick.copy(),
                     contacts={f: dict(fn=c[f]['fn'], has=c[f]['has'],
