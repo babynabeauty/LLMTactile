@@ -82,6 +82,10 @@ class Partition:
     def k(self) -> int:
         return len(self.centers)
 
+    def contactable(self, max_abs_nz: float = .7) -> np.ndarray:
+        """Regions a side grasp can touch: mean normal not pointing mostly up or down."""
+        return np.abs(self.normal[:, 2]) < max_abs_nz
+
     def region_of(self, points: np.ndarray) -> np.ndarray:
         """Region index of each point (..., 3) in the object frame."""
         p = np.asarray(points, float)
@@ -144,7 +148,7 @@ class Instance:
 
 def sample_instance(part: Partition, rng: np.random.Generator, base_range=(.5, 10.), sigma=.25,
                     length_scale_m: Optional[float] = None, p_weak=.2, weak_range=(.3, .6),
-                    weak_region: Optional[int] = None) -> Instance:
+                    weak_region: Optional[int] = None, weak_candidates: Optional[Sequence[int]] = None) -> Instance:
     """Correlated region coefficients: log c ~ N(0, sigma^2 K_rbf(centers)). Passing
     weak_region forces a weak spot there (swap experiment); otherwise one appears with p_weak."""
     base = float(np.exp(rng.uniform(*np.log(base_range))))
@@ -154,7 +158,8 @@ def sample_instance(part: Partition, rng: np.random.Generator, base_range=(.5, 1
     cov = sigma**2*np.exp(-.5*d2/ell**2)+1e-9*np.eye(part.k)
     coeff = np.exp(rng.multivariate_normal(np.zeros(part.k), cov))
     if weak_region is None and rng.random() < p_weak:
-        weak_region = int(rng.integers(part.k))
+        cand = np.arange(part.k) if weak_candidates is None or not len(weak_candidates) else np.asarray(weak_candidates)
+        weak_region = int(rng.choice(cand))
     if weak_region is not None:
         coeff[weak_region] = rng.uniform(*weak_range)
     return Instance(base, coeff, weak_region)
