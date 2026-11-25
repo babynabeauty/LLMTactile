@@ -69,4 +69,7 @@ def safe_force(H: np.ndarray, eps: float = .05, grid: np.ndarray = GRID_N) -> np
 
 
 def label_for(labels: dict, oid: str, variant: str) -> Optional[dict]:
-    return labels.get(f'{oid}/{variant}')
+    """The labels.json entry, or None when there is none or it has no answer (every call failed): an
+    empty entry would silently give the default class median for every region."""
+    lab = labels.get(f'{oid}/{variant}')
+    return lab if lab and lab.get('n_answers', 1) > 0 and lab.get('regions') else None
