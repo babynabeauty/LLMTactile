@@ -55,6 +55,9 @@ def main():
     ap.add_argument('--mu', type=float, default=.6, help='true contact friction')
     ap.add_argument('--mu-hat', type=float, default=.5, help="allocator's friction estimate")
     ap.add_argument('--safety', type=float, default=2.)
+    ap.add_argument('--preload-s', type=float, default=.5,
+                    help='preload ramp duration; the thumb ramping up pushes index/middle over target until the '
+                         'force controller catches up (065-d: ~0.1 N over during a 0.5 s ramp)')
     ap.add_argument('--weak-range', type=float, nargs=2, default=None,
                     help='fixed weak threshold range N for both sides; default: per side from the snapshot window')
     ap.add_argument('--window-frac', type=float, nargs=2, default=[.3, .8],
@@ -107,7 +110,7 @@ def main():
     from risk_mvp.episode import safe_normal
     from risk_mvp.scene import quat_to_mat
     from risk_mvp.snapshot import swap_window
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety)
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=max(1, int(round(a.preload_s*60))))
     pts = {f: np.array(snap['contacts'][f]['point_obj']) for f in FINGERS}
     nrms = {f: safe_normal(np.array(snap['contacts'][f]['normal_obj'], float), pts[f]) for f in FINGERS}
     eqf, wi, wm = swap_window(pts, nrms, quat_to_mat(snap['obj_quat']), mass=a.mass, mu=a.mu_hat, safety=a.safety,
