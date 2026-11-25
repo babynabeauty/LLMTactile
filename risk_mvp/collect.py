@@ -215,7 +215,15 @@ def summarise(out: Path, objects):
                 d[key][v] = dict(n=len(rr), broke=float(np.mean([x['broke'] for x in rr])),
                                  dropped=float(np.mean([x['dropped'] for x in rr])))
         d['broke'], d['dropped'] = float(d['broke']), float(d['dropped'])
+        # breaks right after the settle (first 0.1 s judged): the start force alone, not the allocation
+        d['early_breaks'] = int(sum(1 for x in r if x['event'] and x['event']['step'] < 15+6))
         S['objects'][oid] = d
+    # policy comparison only where the policy's own forces were used (scale 1), all objects together
+    one = [x for x in rows if x['scale'] == 1.]
+    S['scale1_condition_policy'] = {
+        c: {p: dict(n=len(v), broke=float(np.mean(v))) for p in POLICIES
+            for v in [[x['broke'] for x in one if x['condition'] == c and x['policy'] == p]] if v}
+        for c in ('plain', 'visible', 'hidden', 'decoy')}
     (out/'summary.json').write_text(json.dumps(S, indent=1)+'\n')
     return rows, S
 
@@ -273,7 +281,7 @@ def main():
     ap.add_argument('--instances', type=int, default=30, help='instances per object')
     ap.add_argument('--grasps', type=int, default=10, help='grasps per instance')
     ap.add_argument('--batch-envs', type=int, default=120)
-    ap.add_argument('--mass-frac', type=float, nargs=2, default=[.3, .9],
+    ap.add_argument('--mass-frac', type=float, nargs=2, default=[.2, .7],
                     help='instance mass log-uniform in these fractions of the most it can weigh and still be held '
                          'at --mu-hat without exceeding any region threshold (weak spot counted at base strength)')
     ap.add_argument('--mass-range', type=float, nargs=2, default=None, help='kg, overrides --mass-frac')
@@ -313,6 +321,12 @@ def main():
         print(f"{oid:18s} {d['n']:<5d} {d['broke']:5.2f}  {d['dropped']:6.2f}   {d['archive_rows']} ({d['archive_broke']})")
     for oid, why in skipped.items():
         print(f'{oid:18s} skipped: {why}')
+    print('early breaks (first 0.1 s after settle):', {o: d['early_breaks'] for o, d in S['objects'].items()})
+    print('broke, scale 1 only (policy comparison), all objects:')
+    print(f"  {'condition':9s}" + ''.join(f'{p:>16s}' for p in POLICIES))
+    for c, d in S.get('scale1_condition_policy', {}).items():
+        print(f'  {c:9s}' + ''.join(f"{(format(d[p]['broke'], '.2f') + ' (n=' + str(d[p]['n']) + ')' if p in d else '-'):>16s}"
+                                  for p in POLICIES))
     print('WROTE', a.out)
 
 

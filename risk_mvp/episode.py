@@ -54,6 +54,11 @@ class TrialConfig:
     touch_N: float = .5            # snapshot touch force (snapshot.py --touch; thumb twice), used only when the
                                    # snapshot has no per-finger contact force
     settle_ticks: int = 15         # hold the touch force after the restore, not judged
+    start_thumb_N: float = .4      # settle/preload start: the snapshot's finger forces scaled down together so
+                                   # the thumb starts here. The snapshot closes at thumb ~1.1 N, more than the
+                                   # weakest objects take (cups from 1 N broke at the first judged tick).
+                                   # Scaling all three keeps the forces balanced (halving only the thumb
+                                   # made it lose contact). <= 0: the snapshot forces as they are.
     preload_ticks: int = 60        # 1 s: with 0.5 s the thumb ramping up pushed index/middle ~0.1 N over target
                                    # before the force controller caught up (065-d oracle broke 5/16)
     lift_ticks: int = 60
@@ -95,6 +100,8 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     # touch_N let the thumb drop to 0 N and pushed index/middle over their targets when it came back.
     start_N = np.array([snap['contacts'][f].get('fn', np.nan) for f in FINGERS], float)
     start_N = np.where(np.isfinite(start_N) & (start_N > .1), start_N, cfg.touch_N*np.array([2., 1., 1.]))
+    if cfg.start_thumb_N > 0:
+        start_N = start_N*min(1., cfg.start_thumb_N/start_N[0])
     targets = np.tile(start_N, (E, 1))
     alloc_fn = targets.copy()
     feasible = np.ones(E, bool)
