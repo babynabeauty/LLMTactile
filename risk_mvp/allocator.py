@@ -63,7 +63,12 @@ class Contacts:
 class Allocator:
     def __init__(self, contacts: Contacts, n_regions: int, mode: str = 'risk', lam: float = 1.,
                  equal_group: Sequence[str] = ('index', 'middle'), slack_weight: float = 1e4,
-                 torque_scale_m: float = .02, slip_weight: float = 10.):
+                 torque_scale_m: float = .02, slip_weight: float = 10., risk_slack_weight: Optional[float] = None):
+        """risk_slack_weight (default slack_weight / 100): cost of exceeding the damage budget / limit when the
+        problem is infeasible. Lower than the wrench-balance slack, so an infeasible allocation keeps holding
+        the object and takes the least damage risk instead of dropping the grip: with equal weights a too
+        pessimistic belief (a cup believed safe only to ~0.5 N) cut every finger below what the weight needs."""
+        rsw = slack_weight/100. if risk_slack_weight is None else float(risk_slack_weight)
         if mode not in ('risk', 'tactile', 'equal', 'cap', 'oracle'):
             raise ValueError(mode)
         self.c, self.K, self.mode = contacts, n_regions, mode
@@ -116,12 +121,12 @@ class Allocator:
                 cons.append(t[r] >= cp.multiply(self.A[r], F[r])+self.B[r])
             cons += [t >= 0, cp.sum(t) <= self.budget+self.s_risk]
             self.t = t
-            obj = obj+slack_weight*self.s_risk
+            obj = obj+rsw*self.s_risk
         elif mode in ('cap', 'oracle'):
             self.limit = cp.Parameter(n_regions, nonneg=True)
             self.s_risk = cp.Variable(n_regions, nonneg=True)
             cons.append(F+self.margin <= self.limit+self.s_risk)
-            obj = obj+slack_weight*cp.sum(self.s_risk)
+            obj = obj+rsw*cp.sum(self.s_risk)
         elif mode == 'equal':
             idx = [i for i, f in enumerate(contacts.finger) if f in equal_group]
             cons += [fn[idx[j]] == fn[idx[0]] for j in range(1, len(idx))]

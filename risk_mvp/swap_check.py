@@ -41,7 +41,7 @@ import numpy as np
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-METHODS = ('equal', 'tactile', 'oracle')
+METHODS = ('equal', 'tactile', 'oracle')     # + 'vlm' when Astra labels for the marked variants exist
 SIDES = ('index', 'middle')
 
 
@@ -60,6 +60,11 @@ def main():
     ap.add_argument('--window-frac', type=float, nargs=2, default=[.3, .8],
                     help='auto range: floor + frac x (equal - floor), floor = lowest threshold the oracle can respect')
     ap.add_argument('--strong-range', type=float, nargs=2, default=[4., 8.])
+    ap.add_argument('--vlm-labels', type=Path, default=ROOT/'outputs/risk_mvp/vlm_cues/labels.json',
+                    help='vlm_query labels for appearance.py variants; adds method "vlm" when the object has them')
+    ap.add_argument('--appearance', type=Path, default=ROOT/'outputs/risk_mvp/appearance',
+                    help='appearance.py output (its manifest must use this snapshot\'s partition)')
+    ap.add_argument('--sigma', type=float, default=.5, help='log-normal spread of the handwritten VLM prior')
     ap.add_argument('--seed', type=int, default=0)
     ap.add_argument('--backend', default='gpu')
     a = ap.parse_args()
@@ -75,6 +80,28 @@ def main():
     part = partition(object_mesh(O.region_spec(a.object)), snap['k_regions'], seed=snap['partition_seed'],
                      separate=snap['partition_separate'])
     region_of = {f: snap['contacts'][f]['region'] for f in FINGERS}
+    # 'vlm': the weak spot is marked (appearance.py variant cue_r<weak region>) and the risk allocator plans
+    # with the handwritten log-normal belief from Astra's labels of that marked image (prior.py)
+    methods, vlm_hazard = list(METHODS), {}
+    try:
+        from risk_mvp import prior as P
+        from risk_mvp.appearance import fingerprint
+        labels = json.loads(a.vlm_labels.read_text())
+        man = json.loads((a.appearance/'manifest.json').read_text())[a.object]
+        if man['partition']['fingerprint'] != fingerprint(part):
+            raise ValueError('appearance manifest uses another partition than this snapshot; rerun appearance.py')
+        for s in SIDES:
+            lab = P.label_for(labels, a.object, f'cue_r{region_of[s]}')
+            if lab is None:
+                raise KeyError(f'no Astra labels for {a.object}/cue_r{region_of[s]} in {a.vlm_labels}')
+            vlm_hazard[s] = P.hazard_from_label(lab, part.k, sigma=a.sigma)
+            print(f'vlm prior, weak under {s} (mark on region {region_of[s]}): labels '
+                  f'{ {r: v["label"] for r, v in lab["regions"].items()} }, object {lab["object"].get("strength")} '
+                  f'{lab["object"].get("safe_force_N")} N -> safe force at 5 % per region '
+                  f'{P.safe_force(vlm_hazard[s]).round(2).tolist()} N', flush=True)
+        methods.append('vlm')
+    except Exception as exc:                          # noqa: BLE001
+        print(f'method vlm skipped: {type(exc).__name__}: {exc}', flush=True)
     # the swap window the episode allocator sees: equal-split force and, per side, the lowest weak
     # threshold the oracle can still respect (snapshot contacts, normals and pose; this run's mass/mu/safety)
     from risk_mvp.episode import safe_normal
@@ -97,7 +124,7 @@ def main():
         window['has_room'][s] = bool(eqf - w > .1)
     print('swap window', json.dumps(window), flush=True)
     rng = np.random.default_rng(a.seed)
-    cells = [(m, s) for m in METHODS for s in SIDES]
+    cells = [(m, s) for m in methods for s in SIDES]
     modes, sides, thr = [], [], []
     for m, s in cells:
         for _ in range(a.per_cell):
@@ -111,7 +138,12 @@ def main():
     sc = GraspScene(a.object, E, backend=a.backend, mass_kg=a.mass)
     sc.set_mass(a.mass)
     sc.set_friction(a.mu)
-    res = run_trial(sc, snap, part, modes, thr, cfg, mass_kg=a.mass)
+    alloc_modes = ['risk' if m == 'vlm' else m for m in modes]
+    hazard = None
+    if 'vlm' in methods:
+        hazard = np.stack([vlm_hazard[s] if m == 'vlm' else np.zeros_like(vlm_hazard[s])
+                           for m, s in zip(modes, sides)])
+    res = run_trial(sc, snap, part, alloc_modes, thr, cfg, mass_kg=a.mass, hazard=hazard)
     phase_arr = np.array(res.log['phase'])
     hold = phase_arr == 'hold'
     fn_hold = res.log['fn'][hold].mean(0)                     # (E, 3)
@@ -148,8 +180,8 @@ def main():
     import matplotlib
     matplotlib.use('Agg')
     import matplotlib.pyplot as plt
-    fig, axs = plt.subplots(1, len(METHODS), figsize=(4.2*len(METHODS), 3.8), sharey=True)
-    for ax, m in zip(axs, METHODS):
+    fig, axs = plt.subplots(1, len(methods), figsize=(4.2*len(methods), 3.8), sharey=True)
+    for ax, m in zip(axs, methods):
         for i, f, col in ((1, 'index', 'C1'), (2, 'middle', 'C2')):
             ys = [out['cells'][f'{m}/{s}']['hold_N'][f] for s in SIDES]
             ax.plot([0, 1], ys, 'o-', color=col, label=f'{f} force')
@@ -187,8 +219,8 @@ def main():
 
     t = np.arange(len(res.log['phase']))/60
     starts = [(t[i], p) for i, p in enumerate(res.log['phase']) if i == 0 or res.log['phase'][i-1] != p]
-    fig, axs = plt.subplots(len(SIDES), len(METHODS), figsize=(4.2*len(METHODS), 5.4), sharex=True, sharey=True)
-    for j, m in enumerate(METHODS):
+    fig, axs = plt.subplots(len(SIDES), len(methods), figsize=(4.2*len(methods), 5.4), sharex=True, sharey=True)
+    for j, m in enumerate(methods):
         for i, s in enumerate(SIDES):
             ax = axs[i, j]
             e = next(e for e in range(E) if modes[e] == m and sides[e] == s)
@@ -223,7 +255,7 @@ def main():
     for j, s in enumerate(SIDES):
         for i, (key, lab) in enumerate(rows):
             ax = axs[i, j]
-            for k, m in enumerate(METHODS):
+            for k, m in enumerate(methods):
                 idx = [e for e in range(E) if modes[e] == m and sides[e] == s]
                 if key == 'alloc_bad':
                     ax.plot(t, 1-res.log['alloc_ok'][:, idx].mean(1), f'C{k}', label=m)
