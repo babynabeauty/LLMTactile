@@ -55,7 +55,7 @@ def main():
     ap.add_argument('--mu', type=float, default=.6, help='true contact friction')
     ap.add_argument('--mu-hat', type=float, default=.5, help="allocator's friction estimate")
     ap.add_argument('--safety', type=float, default=2.)
-    ap.add_argument('--preload-s', type=float, default=.5,
+    ap.add_argument('--preload-s', type=float, default=1.,
                     help='preload ramp duration; the thumb ramping up pushes index/middle over target until the '
                          'force controller catches up (065-d: ~0.1 N over during a 0.5 s ramp)')
     ap.add_argument('--weak-range', type=float, nargs=2, default=None,

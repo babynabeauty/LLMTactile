@@ -54,7 +54,8 @@ class TrialConfig:
     touch_N: float = .5            # snapshot touch force (snapshot.py --touch; thumb twice), used only when the
                                    # snapshot has no per-finger contact force
     settle_ticks: int = 15         # hold the touch force after the restore, not judged
-    preload_ticks: int = 30
+    preload_ticks: int = 60        # 1 s: with 0.5 s the thumb ramping up pushed index/middle ~0.1 N over target
+                                   # before the force controller caught up (065-d oracle broke 5/16)
     lift_ticks: int = 60
     hold_ticks: int = 120
     lift_m: float = .05

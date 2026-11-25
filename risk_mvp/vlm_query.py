@@ -344,7 +344,9 @@ def main():
         finished answer parses)."""
         oid, v, rep, img, seen, prompt = job
         for path in (logs/f'{oid}_{v}_{rep}.answer.txt', logs/f'{oid}_{v}_{rep}.log'):
-            if path.exists():
+            # only answers newer than the image: a re-rendered image (e.g. a new partition after new
+            # snapshots, so the region numbers moved) must be asked again
+            if path.exists() and path.stat().st_mtime >= img.stat().st_mtime:
                 try:
                     text = path.read_text(errors='replace')
                     return text, parse_answer(text, seen)

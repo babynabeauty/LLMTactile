@@ -146,3 +146,28 @@ def test_from_logs_and_resume(tmp_path):
     assert labels['cupx/cue_r0']['n_answers'] == 2 and labels['cupx/plain']['n_answers'] == 2
     r = subprocess.run(base, capture_output=True, text=True, env=env, timeout=300)
     assert '4 answered earlier (reused), 0 to ask' in r.stdout, r.stdout
+
+
+def test_rerendered_image_is_asked_again(tmp_path):
+    """An answer older than its image (the image was re-rendered) is not reused."""
+    codex = tmp_path/'codex'
+    codex.write_text(FAKE)
+    codex.chmod(codex.stat().st_mode | stat.S_IEXEC)
+    img = tmp_path/'imgs'
+    img.mkdir()
+    from PIL import Image
+    Image.new('RGB', (40, 30)).save(img/'cupx_plain.png')
+    (img/'summary.json').write_text(json.dumps({'cupx': dict(category='thin_cup', regions=dict(centroid=[[0, 0, 0]]*4),
+                                                             views=dict(plain=dict(regions_seen=[0, 2])))}))
+    out = tmp_path/'out'
+    env = dict(os.environ, MPLCONFIGDIR=str(tmp_path/'mpl'))
+    base = [sys.executable, str(ROOT/'risk_mvp/vlm_query.py'), '--images', str(img), '--out', str(out),
+            '--codex', str(codex), '--repeats', '1']
+    assert subprocess.run(base, capture_output=True, text=True, env=env, timeout=300).returncode == 0
+    r = subprocess.run(base, capture_output=True, text=True, env=env, timeout=300)
+    assert '1 answered earlier (reused), 0 to ask' in r.stdout, r.stdout
+    import time
+    time.sleep(1.1)
+    Image.new('RGB', (40, 30), (9, 9, 9)).save(img/'cupx_plain.png')       # re-rendered
+    r = subprocess.run(base, capture_output=True, text=True, env=env, timeout=300)
+    assert '0 answered earlier (reused), 1 to ask' in r.stdout, r.stdout
