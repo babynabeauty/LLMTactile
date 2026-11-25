@@ -96,8 +96,53 @@ def test_preflight_stops_an_old_codex(tmp_path):
     codex.chmod(codex.stat().st_mode | stat.S_IEXEC)
     img = tmp_path/'imgs'
     img.mkdir()
-    (img/'summary.json').write_text(json.dumps({}))
+    from PIL import Image
+    Image.new('RGB', (40, 30)).save(img/'cupx_plain.png')
+    (img/'summary.json').write_text(json.dumps({'cupx': dict(category='thin_cup', views=dict(plain=dict(regions_seen=[0])))}))
     env = dict(os.environ, FAKE_MODE='old')
     r = subprocess.run([sys.executable, str(ROOT/'risk_mvp/vlm_query.py'), '--images', str(img), '--out',
                         str(tmp_path/'out'), '--codex', str(codex)], capture_output=True, text=True, env=env, timeout=120)
     assert r.returncode != 0 and 'newer codex CLI' in r.stderr, r.stdout+r.stderr
+
+
+def test_from_logs_and_resume(tmp_path):
+    """A stopped run: finished calls have the answer after the echoed prompt in their log, unfinished ones
+    only the prompt. --from-logs builds labels from the finished ones; a rerun asks only the rest."""
+    from risk_mvp.vlm_query import PROMPT
+    codex = tmp_path/'codex'
+    codex.write_text(FAKE)
+    codex.chmod(codex.stat().st_mode | stat.S_IEXEC)
+    img = tmp_path/'imgs'
+    img.mkdir()
+    from PIL import Image
+    for v in ('plain', 'cue_r0'):
+        Image.new('RGB', (40, 30)).save(img/f'cupx_{v}.png')
+    summary = {'cupx': dict(category='thin_cup', regions=dict(centroid=[[0, 0, 0]]*4),
+                            views=dict(plain=dict(regions_seen=[0, 2], cue_region=None),
+                                       cue_r0=dict(regions_seen=[0, 2], cue_region=0)))}
+    (img/'summary.json').write_text(json.dumps(summary))
+    out = tmp_path/'out'
+    logs = out/'logs'
+    logs.mkdir(parents=True)
+    prompt = PROMPT.format(seen='0, 2', unseen='1, 3')
+    ans = json.dumps({"object": {"name": "cup", "material": "plastic", "strength": "fragile",
+                                 "safe_force_N": [1, 3], "confidence": .6},
+                      "regions": [{"id": 0, "label": "fragile", "confidence": .9, "reason": "mark"},
+                                  {"id": 2, "label": "normal", "confidence": .8, "reason": "wall"}]})
+    (logs/'cupx_cue_r0_0.log').write_text('codex exec ... <prompt>\n\nuser\n'+prompt+'\n\ncodex\n'+ans+'\n')
+    (logs/'cupx_cue_r0_1.log').write_text('codex exec ... <prompt>\n\nuser\n'+prompt+'\nthinking...\n')
+    env = dict(os.environ, MPLCONFIGDIR=str(tmp_path/'mpl'))
+    base = [sys.executable, str(ROOT/'risk_mvp/vlm_query.py'), '--images', str(img), '--out', str(out),
+            '--codex', str(codex), '--repeats', '2']
+    r = subprocess.run(base+['--from-logs'], capture_output=True, text=True, env=env, timeout=300)
+    assert r.returncode == 0, r.stdout+r.stderr
+    labels = json.loads((out/'labels.json').read_text())
+    assert list(labels) == ['cupx/cue_r0'] and labels['cupx/cue_r0']['n_answers'] == 1
+    assert labels['cupx/cue_r0']['regions']['0']['label'] == 'fragile'
+    r = subprocess.run(base, capture_output=True, text=True, env=env, timeout=300)
+    assert r.returncode == 0, r.stdout+r.stderr
+    assert '1 answered earlier (reused), 3 to ask' in r.stdout, r.stdout
+    labels = json.loads((out/'labels.json').read_text())
+    assert labels['cupx/cue_r0']['n_answers'] == 2 and labels['cupx/plain']['n_answers'] == 2
+    r = subprocess.run(base, capture_output=True, text=True, env=env, timeout=300)
+    assert '4 answered earlier (reused), 0 to ask' in r.stdout, r.stdout

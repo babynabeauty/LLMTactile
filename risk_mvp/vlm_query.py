@@ -307,12 +307,16 @@ def main():
     ap.add_argument('--codex', default=shutil.which('codex') or '/usr/local/bin/codex')
     ap.add_argument('--model', default=None, help='codex model (default: codex config)')
     ap.add_argument('--timeout', type=int, default=600, help='seconds per codex call')
+    ap.add_argument('--from-logs', action='store_true',
+                    help='no codex calls: build labels.json from the answers already in <out>/logs (e.g. after '
+                         'stopping a run); variants without any answer are left out')
+    ap.add_argument('--fresh', action='store_true', help='ask again even where an earlier answer is saved')
     ap.add_argument('--no-preflight', action='store_true', help='skip the one text-only test call')
     ap.add_argument('--effort', default=None, help='codex reasoning effort, e.g. low / medium (default: codex config)')
     a = ap.parse_args()
     a.out.mkdir(parents=True, exist_ok=True)
     summary = json.loads((a.images/'summary.json').read_text())
-    flags = codex_flags(a.codex)
+    flags = set() if a.from_logs else codex_flags(a.codex)
     print('codex', a.codex, 'uses', sorted(f for f in flags if f in {'--image', '-i', '--output-last-message',
                                                                      '--output-schema', '--skip-git-repo-check',
                                                                      '--sandbox', '--model', '-c'}), flush=True)
@@ -332,11 +336,40 @@ def main():
                 jobs.append((oid, v, rep, img, seen, prompt))
 
     logs = a.out/'logs'
-    logs.mkdir(exist_ok=True)
-    if not a.no_preflight:
+    logs.mkdir(parents=True, exist_ok=True)
+
+    def recover(job):
+        """An earlier answer to this call: the saved answer file, else the answer at the end of the codex log
+        of a run that was stopped (the prompt echoed at the top of the log is not valid JSON, so only a
+        finished answer parses)."""
+        oid, v, rep, img, seen, prompt = job
+        for path in (logs/f'{oid}_{v}_{rep}.answer.txt', logs/f'{oid}_{v}_{rep}.log'):
+            if path.exists():
+                try:
+                    text = path.read_text(errors='replace')
+                    return text, parse_answer(text, seen)
+                except Exception:                     # noqa: BLE001
+                    continue
+        return None
+
+    results = {}
+    todo = []
+    for job in jobs:
+        got = None if a.fresh else recover(job)
+        if got is not None:
+            results.setdefault(job[:2], []).append(dict(repeat=job[2], raw=got[0], parsed=got[1], error=None,
+                                                        reused=True))
+        elif not a.from_logs:
+            todo.append(job)
+    n_reused = sum(map(len, results.values()))
+    print(f'{len(jobs)} calls planned, {n_reused} answered earlier (reused)'
+          + ('' if a.from_logs else f', {len(todo)} to ask'), flush=True)
+    if todo and not a.no_preflight:
         preflight(a.codex, flags, a.model, a.effort, log=logs/'preflight.log')
-    print(f'{len(jobs)} codex calls, {a.jobs} at a time; each can take a few minutes. '
-          f'Live codex output: tail -f {logs}/<object>_<variant>_<repeat>.log', flush=True)
+    if todo:
+        print(f'{len(todo)} codex calls, {a.jobs} at a time; each can take a few minutes. Every answer is saved '
+              f'as it arrives: stopping and rerunning the same command continues where it stopped. '
+              f'Live codex output: tail -f {logs}/<object>_<variant>_<repeat>.log', flush=True)
     t0 = time.time()
 
     def run(job):
@@ -347,14 +380,14 @@ def main():
             text = ask(a.codex, flags, img, prompt, a.model, a.timeout, log=log, effort=a.effort)
         except Exception as exc:                      # noqa: BLE001
             return job, None, f'{type(exc).__name__}: {exc}'
+        (logs/f'{oid}_{v}_{rep}.answer.txt').write_text(text)
         try:
             return job, (text, parse_answer(text, seen)), None
         except Exception as exc:                      # noqa: BLE001
             return job, (text, None), f'parse: {type(exc).__name__}: {exc}'
 
-    results = {}
     with ThreadPoolExecutor(max(1, a.jobs)) as ex:
-        for fut in as_completed([ex.submit(run, j) for j in jobs]):
+        for fut in as_completed([ex.submit(run, j) for j in todo]):
             job, res, err = fut.result()
             oid, v, rep = job[:3]
             results.setdefault((oid, v), []).append(dict(repeat=rep, raw=res[0] if res else None,
