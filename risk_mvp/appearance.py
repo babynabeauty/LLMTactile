@@ -232,6 +232,12 @@ def main():
         tiles = [Image.open(a.out/d['image']) for oid in views for d in views[oid].values()]
         if tiles:
             RD.montage(tiles, cols=max(len(v) for v in views.values()), size=(320, 240)).save(a.out/'sheet.png')
+    # merge with objects rendered earlier into the same --out (render only new objects with --objects)
+    old = a.out/'manifest.json'
+    if old.exists():
+        prev = json.loads(old.read_text())
+        prev.update(manifest)
+        manifest = prev
     (a.out/'manifest.json').write_text(json.dumps(manifest, indent=1)+'\n')
     # summary.json in the shape vlm_query reads (per object: category, regions, views with regions_seen)
     summary = {oid: dict(category=m['category'], regions=m['regions'],

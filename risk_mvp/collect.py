@@ -2,7 +2,8 @@
 
 Per object (its snapshot grasp, its canonical partition):
   instances  appearance.sample_instance (strength from the category; visible / hidden / decoy / plain
-             weak spot), object mass log-uniform in --mass-range, true contact friction uniform in
+             weak spot), object mass log-uniform in --mass-frac of the most this grasp can hold at
+             --mu-hat (holdable_mass; or a fixed --mass-range), true contact friction uniform in
              --mu-range (the allocator's hard-cone friction --mu-hat stays a valid lower bound)
   grasps     --grasps per instance, each with a data policy and a force scale:
                equal / tactile   risk-blind allocations
@@ -40,6 +41,29 @@ POLICIES = dict(equal=.2, tactile=.3, vlm=.3, oracle=.2)
 FINGERS = ('thumb', 'index', 'middle')
 
 
+def holdable_mass(snap, mu_hat, safety=2., mass_margin=.1, hi=.5):
+    """Largest object mass (kg) this snapshot grasp can hold with the allocator's hard-cone friction
+    (equal split feasible), by bisection. Small round fruit hold far less than a cup (strawberry and plum
+    could not hold 0.15 kg), so masses are drawn per object below this limit."""
+    from risk_mvp.allocator import Allocator, Contacts, gravity_wrench
+    from risk_mvp.episode import safe_normal
+    from risk_mvp.scene import quat_to_mat
+    pos = np.array([snap['contacts'][f]['point_obj'] for f in FINGERS])
+    nrm = np.array([safe_normal(np.array(snap['contacts'][f]['normal_obj'], float), p) for f, p in zip(FINGERS, pos)])
+    alloc = Allocator(Contacts(pos, nrm, np.arange(3), list(FINGERS)), 3, mode='equal')
+    R = quat_to_mat(snap['obj_quat'])
+
+    def ok(m):
+        return alloc.solve(gravity_wrench(m*(1+mass_margin), R), mu=mu_hat, fmax=8., margin=.1, safety=safety)['feasible']
+    lo, top = 0., hi
+    if ok(top):
+        return top
+    for _ in range(14):
+        mid = (lo+top)/2
+        lo, top = (mid, top) if ok(mid) else (lo, mid)
+    return lo
+
+
 def plan_object(oid, part, labels, n_inst, grasps, rng, a):
     """Instances and their grasps for one object. Returns (instances, envs) or raises if labels are missing."""
     from risk_mvp import appearance as A
@@ -61,7 +85,7 @@ def plan_object(oid, part, labels, n_inst, grasps, rng, a):
             kw['mark_region'] = int(rng.choice(labelled))
         inst = A.sample_instance(oid, part, rng, condition=cond, **kw)
         lab = P.label_for(labels, oid, inst.variant)
-        rec = dict(inst.to_json(), instance=i, mass_kg=float(np.exp(rng.uniform(*np.log(a.mass_range)))),
+        rec = dict(inst.to_json(), instance=i, mass_kg=float(np.exp(rng.uniform(*np.log(a._mass_range)))),
                    mu=float(rng.uniform(*a.mu_range)),
                    vlm={r: dict(label=v['label'], confidence=v['confidence'], reason=v.get('reason', ''))
                         for r, v in lab['regions'].items()},
@@ -89,7 +113,13 @@ def run_object(oid, a, labels, manifest, rng, out: Path):
     if manifest.get(oid, {}).get('partition', {}).get('fingerprint') != pinfo['fingerprint']:
         raise RuntimeError('appearance manifest uses another partition than the snapshot: rerun appearance.py '
                            'and vlm_query.py after snapshot.py')
+    m_hold = holdable_mass(snap, a.mu_hat, a.safety)
+    a._mass_range = a.mass_range if a.mass_range else [max(.005, a.mass_frac[0]*m_hold), max(.01, a.mass_frac[1]*m_hold)]
+    print(f'{oid}: holds up to {1000*m_hold:.0f} g at mu {a.mu_hat}; mass drawn in '
+          f'{1000*a._mass_range[0]:.0f}-{1000*a._mass_range[1]:.0f} g', flush=True)
     instances, envs = plan_object(oid, part, labels, a.instances, a.grasps, rng, a)
+    for i in instances:
+        i['holdable_mass_kg'] = m_hold
     cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety)
     E = min(a.batch_envs, len(envs))
     sc = GraspScene(oid, E, backend=a.backend)
@@ -222,7 +252,9 @@ def main():
     ap.add_argument('--instances', type=int, default=30, help='instances per object')
     ap.add_argument('--grasps', type=int, default=10, help='grasps per instance')
     ap.add_argument('--batch-envs', type=int, default=120)
-    ap.add_argument('--mass-range', type=float, nargs=2, default=[.05, .25], help='kg, log-uniform')
+    ap.add_argument('--mass-frac', type=float, nargs=2, default=[.25, .7],
+                    help='object mass log-uniform in these fractions of the mass the grasp can hold at --mu-hat')
+    ap.add_argument('--mass-range', type=float, nargs=2, default=None, help='kg, overrides --mass-frac')
     ap.add_argument('--mu-range', type=float, nargs=2, default=[.5, .9], help='true friction, uniform')
     ap.add_argument('--mu-hat', type=float, default=.5, help='allocator hard-cone friction (lower bound)')
     ap.add_argument('--safety', type=float, default=2.)
