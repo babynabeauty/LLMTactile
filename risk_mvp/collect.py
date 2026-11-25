@@ -2,8 +2,8 @@
 
 Per object (its snapshot grasp, its canonical partition):
   instances  appearance.sample_instance (strength from the category; visible / hidden / decoy / plain
-             weak spot), mass log-uniform in --mass-frac of the most the instance can weigh and still be
-             held at --mu-hat within its thresholds, the weak spot counted at base strength
+             weak spot, under a finger with probability --p-touched), mass log-uniform in --mass-frac of
+             the most the instance can weigh and still be held at --mu-hat within all its true thresholds
              (holdable_mass; or a fixed --mass-range), true contact friction uniform in
              --mu-range (the allocator's hard-cone friction --mu-hat stays a valid lower bound)
   grasps     --grasps per instance, each with a data policy and a force scale:
@@ -84,26 +84,33 @@ def plan_object(oid, part, labels, n_inst, grasps, rng, a, snap=None, m_hold=Non
     cond_names = list(A.DEFAULT_MIX)
     cond_p = np.array([A.DEFAULT_MIX[c] for c in cond_names])
     instances, envs = [], []
+    fr = [snap['contacts'][f]['region'] for f in FINGERS]
+
+    def pick(cands):
+        # One grasp per object touches 3 of its regions; a weak spot or mark elsewhere never matters to the
+        # allocation, so put it under a finger with probability --p-touched.
+        under = [r for r in cands if r in fr]
+        return int(rng.choice(under if under and rng.random() < a.p_touched else cands))
     for i in range(n_inst):
         cond = cond_names[rng.choice(len(cond_names), p=cond_p/cond_p.sum())]
         kw = {}
         if cond == 'visible':
-            kw['weak_region'] = int(rng.choice(labelled))
+            kw['weak_region'] = pick(labelled)
+        elif cond == 'hidden':
+            kw['weak_region'] = pick(A.mark_regions(part))
         elif cond == 'decoy':
-            kw['mark_region'] = int(rng.choice(labelled))
+            kw['mark_region'] = pick(labelled)
         inst = A.sample_instance(oid, part, rng, condition=cond, **kw)
         lab = P.label_for(labels, oid, inst.variant)
         if a.mass_range:
             m = float(np.exp(rng.uniform(*np.log(a.mass_range))))
             m_strength = None
         else:
-            # the most this instance can weigh and still be held without exceeding any region's threshold,
-            # its weak spot counted at the object's base strength: a plain instance is then holdable
-            # without damage, and a weak one breaks or not depending on whether the allocation avoids it
+            # the most this instance can weigh and still be held by an allocation that respects every true
+            # threshold, its weak spot included: the oracle can then hold it without damage, while an
+            # allocation that does not avoid the weak spot may break it. (Counting the weak spot at base
+            # strength made instances so light that nothing broke at scale 1.)
             lim = np.array(inst.thresholds, float)
-            if inst.weak_region is not None:
-                lim[inst.weak_region] = inst.base_N
-            fr = [snap['contacts'][f]['region'] for f in FINGERS]
             m_strength = holdable_mass(snap, a.mu_hat, a.safety, limit=lim, region=fr, hi=m_hold)
             m = float(max(.005, np.exp(rng.uniform(*np.log(np.array(a.mass_frac)*max(m_strength, .006))))))
         rec = dict(inst.to_json(), instance=i, mass_kg=m, strength_holdable_kg=m_strength,
@@ -281,9 +288,11 @@ def main():
     ap.add_argument('--instances', type=int, default=30, help='instances per object')
     ap.add_argument('--grasps', type=int, default=10, help='grasps per instance')
     ap.add_argument('--batch-envs', type=int, default=120)
-    ap.add_argument('--mass-frac', type=float, nargs=2, default=[.2, .7],
+    ap.add_argument('--mass-frac', type=float, nargs=2, default=[.5, .9],
                     help='instance mass log-uniform in these fractions of the most it can weigh and still be held '
-                         'at --mu-hat without exceeding any region threshold (weak spot counted at base strength)')
+                         'at --mu-hat without exceeding any true region threshold (weak spot included)')
+    ap.add_argument('--p-touched', type=float, default=.8,
+                    help='probability that a weak spot / mark is put on a region a finger touches')
     ap.add_argument('--mass-range', type=float, nargs=2, default=None, help='kg, overrides --mass-frac')
     ap.add_argument('--mu-range', type=float, nargs=2, default=[.5, .9], help='true friction, uniform')
     ap.add_argument('--mu-hat', type=float, default=.5, help='allocator hard-cone friction (lower bound)')
