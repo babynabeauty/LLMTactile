@@ -73,8 +73,12 @@ class TrialResult:
 
 
 def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray, cfg: TrialConfig = TrialConfig(),
-              mass_kg=None, hazard: Optional[np.ndarray] = None, cap_N: Optional[np.ndarray] = None) -> TrialResult:
+              mass_kg=None, hazard: Optional[np.ndarray] = None, cap_N: Optional[np.ndarray] = None,
+              scale: Optional[np.ndarray] = None) -> TrialResult:
+    """scale (E,): multiplies the allocated finger forces (data collection: squeeze harder than the
+    allocator would, so thresholds get crossed and the archive has breaks as well as survivals)."""
     E = sc.E
+    scale = np.ones(E) if scale is None else np.broadcast_to(np.asarray(scale, float), (E,))
     assert len(modes) == E and thresholds.shape == (E, part.k)
     sc.restore(snap)
     mass = np.broadcast_to(np.asarray(sc.mass_kg if mass_kg is None else mass_kg, float), (E,))
@@ -103,7 +107,7 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     q_lift = q_arm0+(q_up-q_here)
     S = cfg.settle_ticks
     n_ticks = S+cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
-    log = dict(live_region_mismatch=np.zeros((n_ticks, E, 3), bool), fn=np.zeros((n_ticks, E, 3)), target=np.zeros((n_ticks, E, 3)), region_F=np.zeros((n_ticks, E, part.k)),
+    log = dict(live_region_mismatch=np.zeros((n_ticks, E, 3), bool), fn=np.zeros((n_ticks, E, 3)), ft=np.zeros((n_ticks, E, 3)), target=np.zeros((n_ticks, E, 3)), region_F=np.zeros((n_ticks, E, part.k)),
                has=np.zeros((n_ticks, E, 3), bool), phase=[], obj_rot_deg=np.zeros((n_ticks, E)),
                obj_slip_mm=np.zeros((n_ticks, E)), alloc_ok=np.ones((n_ticks, E), bool),
                eq_slack=np.zeros((n_ticks, E)), risk_slack=np.zeros((n_ticks, E)), settle_peak_N=np.zeros(E))
@@ -141,7 +145,7 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
                 elif modes[e] == 'cap':
                     kw.update(limit=np.full(part.k, cap_N[e] if cap_N is not None else 2.))
                 rep = allocs[e].solve(**kw)
-                alloc_fn[e] = [rep['finger_normal'][f] for f in FINGERS]
+                alloc_fn[e] = [scale[e]*rep['finger_normal'][f] for f in FINGERS]
                 feasible[e] &= rep['feasible']
                 ok_now[e], eq_slack[e], risk_slack[e] = rep['feasible'], rep['eq_slack'], rep['risk_slack']
         ramp = 0. if t < S else min(1., (t-S+1)/cfg.preload_ticks)
@@ -172,6 +176,7 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
             F[:, reg[i]] += np.where(c[f]['has'], c[f]['fn'], 0.)
             log['live_region_mismatch'][t, :, i] = c[f]['has'] & (part.region_of(p_obj) != reg[i])
             log['fn'][t, :, i] = c[f]['fn']
+            log['ft'][t, :, i] = c[f].get('tangential', np.zeros(E))
             log['has'][t, :, i] = c[f]['has']
         if t < S:
             log['settle_peak_N'] = np.maximum(log['settle_peak_N'], F.max(1))
