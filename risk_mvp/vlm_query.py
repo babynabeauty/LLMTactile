@@ -11,6 +11,8 @@ is what risk_model's "VLM confidence" input gets together with the stated confid
 
   python risk_mvp/vlm_query.py --images outputs/risk_mvp/objects --out outputs/risk_mvp/vlm
   python risk_mvp/vlm_query.py --objects 065-a_cups 018_plum --variants cue --repeats 1   # quick try
+  python risk_mvp/vlm_query.py --images outputs/risk_mvp/appearance --out outputs/risk_mvp/vlm_cues
+                                 # every variant of appearance.py (plain + one mark per contactable region)
 Writes <id>_<variant>.json (parsed answers + raw text), labels.json (merged, one entry per object x
 variant: majority label, agreement, mean confidence, reason per region; object-level answer) and
 vlm_labels.png. Send back labels.json and vlm_labels.png (and a raw .json if anything failed to parse).
@@ -232,6 +234,15 @@ def merge(answers: list, seen: list) -> dict:
     return out
 
 
+def mark_region(obj_summary: dict, variant: str):
+    """Region carrying the painted mark in this variant (None for plain). appearance.py stores it per
+    variant; objects_check.py has one cue region per object for its 'cue' variant."""
+    view = obj_summary['views'][variant]
+    if 'cue_region' in view:
+        return view['cue_region']
+    return obj_summary.get('cue_region') if variant == 'cue' else None
+
+
 # ---------------------------------------------------------------- picture
 def plot_labels(labels: dict, summary: dict, k: int, path: Path):
     import os
@@ -257,8 +268,8 @@ def plot_labels(labels: dict, summary: dict, k: int, path: Path):
             else:
                 ax.add_patch(Rectangle((r, y), .95, .9, color=colour[reg['label']], alpha=.35+.65*reg['confidence']))
                 ax.text(r+.47, y+.45, f"{reg['label'][:4]}\n{reg['agreement']:.0%}", ha='center', va='center', fontsize=6)
-            cue = summary.get(oid, {}).get('cue_region')
-            if variant == 'cue' and cue == r:
+            cue = L.get('cue_region')
+            if cue is not None and cue == r:
                 ax.add_patch(Rectangle((r-.02, y-.02), .99, .94, fill=False, ec='k', lw=2))
         o = L['object']
         if o:
@@ -288,7 +299,9 @@ def main():
     ap.add_argument('--images', type=Path, default=ROOT/'outputs/risk_mvp/objects')
     ap.add_argument('--out', type=Path, default=ROOT/'outputs/risk_mvp/vlm')
     ap.add_argument('--objects', nargs='*', default=None)
-    ap.add_argument('--variants', nargs='*', default=['plain', 'cue'])
+    ap.add_argument('--variants', nargs='*', default=None,
+                    help='default: every variant in summary.json (objects_check: plain, cue; appearance.py: '
+                         'plain, cue_r<r>)')
     ap.add_argument('--repeats', type=int, default=3)
     ap.add_argument('--jobs', type=int, default=4, help='parallel codex calls')
     ap.add_argument('--codex', default=shutil.which('codex') or '/usr/local/bin/codex')
@@ -305,7 +318,7 @@ def main():
                                                                      '--sandbox', '--model', '-c'}), flush=True)
     jobs = []
     for oid in a.objects or list(summary):
-        for v in a.variants:
+        for v in a.variants or list(summary[oid]['views']):
             img = a.images/f'{oid}_{v}.png'
             if not img.exists():
                 print('missing', img, flush=True)
@@ -357,7 +370,7 @@ def main():
              for r in rs], indent=1)+'\n')
         m = merge(ok, seen) if ok else dict(regions={}, object={})
         m['regions'] = {str(i): x for i, x in m['regions'].items()}
-        m.update(n_answers=len(ok), n_asked=len(rs), regions_seen=seen, cue_region=summary[oid].get('cue_region'),
+        m.update(n_answers=len(ok), n_asked=len(rs), regions_seen=seen, cue_region=mark_region(summary[oid], v),
                  category=summary[oid].get('category'))
         labels[f'{oid}/{v}'] = m
         k_max = max(k_max, len(summary[oid]['regions']['centroid']) if 'centroid' in summary[oid].get('regions', {})
@@ -368,7 +381,7 @@ def main():
     for key, m in labels.items():
         o = m['object']
         exp = EXPECTED_OBJECT.get(m['category'])
-        cue = m['regions'].get(str(m['cue_region'])) if key.endswith('/cue') else None
+        cue = None if m['cue_region'] is None else m['regions'].get(str(m['cue_region']))
         print(f"{key:24s} {m['n_answers']}/{m['n_asked']}     {(o.get('strength', '-')+' ('+str(exp)+')'):25s} "
               + ('-' if cue is None else f"{cue['label']} ({cue['agreement']:.0%})"))
     if labels:
