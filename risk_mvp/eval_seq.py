@@ -75,7 +75,7 @@ def run_object(oid, a, labels, manifest, models, rng, out):
     part, pinfo = canonical_partition(oid, a.snapshots)
     if manifest[oid]['partition']['fingerprint'] != pinfo['fingerprint']:
         raise RuntimeError('appearance manifest and snapshot partitions differ')
-    m_hold = C.holdable_mass(snap, a.mu_hat, a.safety)
+    m_hold = C.holdable_mass(snap, *C.hard_cone(a))
     instances, _ = C.plan_object(oid, part, labels, a.instances, 0, rng, a, snap=snap, m_hold=m_hold)
     methods = list(a.methods)
     for m in ('model', 'model_novlm'):
@@ -91,7 +91,7 @@ def run_object(oid, a, labels, manifest, models, rng, out):
     sc.set_friction(np.array([r['mu'] for r in inst]))
     fr = {f: snap['contacts'][f]['region'] for f in FINGERS}
     G = CD.region_features(manifest[oid])
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety)
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, min_safety=a.min_safety)
     # probe: settle phase only (same start forces for every method)
     probe = run_trial(sc, snap, part, ['equal']*E, thr, TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=1,
                                                                       lift_ticks=1, hold_ticks=1), mass_kg=mass)
@@ -207,6 +207,9 @@ def main():
     ap.add_argument('--mu-range', type=float, nargs=2, default=[.5, .9])
     ap.add_argument('--mu-hat', type=float, default=.5)
     ap.add_argument('--safety', type=float, default=2.)
+    ap.add_argument('--min-safety', type=float, default=1.3,
+                    help='hard cone at mu_hat / min_safety for every method (1: none; then the risk allocators '
+                         'and the oracle dropped 19-36 %% of the grasps)')
     ap.add_argument('--sigma', type=float, default=.5)
     ap.add_argument('--scale-range', type=float, nargs=2, default=[1., 1.])
     ap.add_argument('--max-rot-deg', type=float, default=20., help='also report grasps that stayed under this')

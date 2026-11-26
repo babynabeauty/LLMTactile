@@ -72,6 +72,12 @@ def holdable_mass(snap, mu_hat, safety=2., mass_margin=.1, hi=.5, limit=None, re
     return lo
 
 
+def hard_cone(a):
+    """(friction, safety) the allocator's hard cone uses: mu_hat / min_safety, soft cone kept at mu_hat / safety."""
+    ms = getattr(a, 'min_safety', 1.)
+    return a.mu_hat/ms, max(1., a.safety/ms)
+
+
 def plan_object(oid, part, labels, n_inst, grasps, rng, a, snap=None, m_hold=None):
     """Instances and their grasps for one object. Returns (instances, envs) or raises if labels are missing."""
     from risk_mvp import appearance as A
@@ -111,7 +117,8 @@ def plan_object(oid, part, labels, n_inst, grasps, rng, a, snap=None, m_hold=Non
             # allocation that does not avoid the weak spot may break it. (Counting the weak spot at base
             # strength made instances so light that nothing broke at scale 1.)
             lim = np.array(inst.thresholds, float)
-            m_strength = holdable_mass(snap, a.mu_hat, a.safety, limit=lim, region=fr, hi=m_hold)
+            mu_h, sf_h = hard_cone(a)
+            m_strength = holdable_mass(snap, mu_h, sf_h, limit=lim, region=fr, hi=m_hold)
             m = float(max(.005, np.exp(rng.uniform(*np.log(np.array(a.mass_frac)*max(m_strength, .006))))))
         rec = dict(inst.to_json(), instance=i, mass_kg=m, strength_holdable_kg=m_strength,
                    mu=float(rng.uniform(*a.mu_range)),
@@ -141,14 +148,14 @@ def run_object(oid, a, labels, manifest, rng, out: Path):
     if manifest.get(oid, {}).get('partition', {}).get('fingerprint') != pinfo['fingerprint']:
         raise RuntimeError('appearance manifest uses another partition than the snapshot: rerun appearance.py '
                            'and vlm_query.py after snapshot.py')
-    m_hold = holdable_mass(snap, a.mu_hat, a.safety)
+    m_hold = holdable_mass(snap, *hard_cone(a))
     instances, envs = plan_object(oid, part, labels, a.instances, a.grasps, rng, a, snap=snap, m_hold=m_hold)
     ms = np.array([i['mass_kg'] for i in instances])
     print(f'{oid}: grasp holds up to {1000*m_hold:.0f} g at mu {a.mu_hat}; instance masses '
           f'{1000*ms.min():.0f}-{1000*ms.max():.0f} g (median {1000*np.median(ms):.0f})', flush=True)
     for i in instances:
         i['holdable_mass_kg'] = m_hold
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety)
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, min_safety=a.min_safety)
     E = min(a.batch_envs, len(envs))
     sc = GraspScene(oid, E, backend=a.backend)
     region_of = {f: snap['contacts'][f]['region'] for f in FINGERS}
@@ -297,6 +304,7 @@ def main():
     ap.add_argument('--mu-range', type=float, nargs=2, default=[.5, .9], help='true friction, uniform')
     ap.add_argument('--mu-hat', type=float, default=.5, help='allocator hard-cone friction (lower bound)')
     ap.add_argument('--safety', type=float, default=2.)
+    ap.add_argument('--min-safety', type=float, default=1., help='hard cone at mu_hat / min_safety for every method')
     ap.add_argument('--sigma', type=float, default=.5, help='spread of the handwritten VLM prior')
     ap.add_argument('--scale-range', type=float, nargs=2, default=[1., 2.5])
     ap.add_argument('--seed', type=int, default=0)

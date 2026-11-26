@@ -47,6 +47,10 @@ def safe_normal(n, point_obj):
 class TrialConfig:
     mu_hat: float = .5            # allocator's slip-limit friction estimate
     safety: float = 2.            # slip-margin factor (soft cone mu_hat / safety)
+    min_safety: float = 1.        # hard cone at mu_hat / min_safety: a slip margin no method may give up.
+                                  # With 1 the risk allocators (and the oracle) gave up the whole margin when
+                                  # the belief was tight and dropped 19-36 % of the grasps (eval_seq): the point
+                                  # contact model leaves out in-hand rotation, lift acceleration, tracking error
     margin_N: float = .1          # force-estimate margin in the damage constraint
     eps: float = .05              # damage budget for the risk mode
     mass_margin: float = .1
@@ -144,7 +148,8 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
         if t >= S and (t-S) % cfg.alloc_every == 0:
             for e in range(E):
                 w = gravity_wrench(mass[e]*(1+cfg.mass_margin), R[e])
-                kw = dict(w_ext=w, mu=cfg.mu_hat, fmax=cfg.fmax_N, margin=cfg.margin_N, safety=cfg.safety)
+                kw = dict(w_ext=w, mu=cfg.mu_hat/cfg.min_safety, fmax=cfg.fmax_N, margin=cfg.margin_N,
+                          safety=max(1., cfg.safety/cfg.min_safety))       # soft cone stays at mu_hat / safety
                 if modes[e] == 'risk':
                     kw.update(hazard=hazard[e], eps=cfg.eps)
                 elif modes[e] == 'oracle':
