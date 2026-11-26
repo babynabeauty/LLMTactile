@@ -80,6 +80,8 @@ class TrialConfig:
     shake_hz: float = 3.           # a quarter period apart, shake_mm amplitude (8 mm at 3 Hz: ~2.8 m/s^2 peak),
     shake_mm: float = 8.           # then rest_ticks still before the drop check. Holding still only never punished
     rest_ticks: int = 30           # a grip too loose to survive a bump, so the most cautious method always won.
+    fail_rot_deg: float = None     # an object turned more than this in the hand after the lift counts as lost
+                                   # (with the shake, loose grips let 065-a turn 90-130 deg without falling)
     hold_ticks: int = 120
     lift_m: float = .05
     alloc_every: int = 4
@@ -110,7 +112,9 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     nrm = np.array([safe_normal(n, p) for n, p in zip(nrm, pos)])
     reg = np.array([snap['contacts'][f]['region'] for f in FINGERS])
     def make_alloc(m):
-        kw = dict(slip_weight=cfg.risk_slip_weight, risk_slack_weight=1000.) \
+        # holding outweighs the damage budget by far: with the wrench-balance slack at 1e4 a very pessimistic
+        # belief (foam brick believed safe to ~0.3 N) made letting go cheaper than its steep hazard
+        kw = dict(slip_weight=cfg.risk_slip_weight, risk_slack_weight=1000., slack_weight=1e6) \
             if cfg.risk_safety and m in ('risk', 'oracle', 'cap') else {}
         return Allocator(Contacts(pos, nrm, reg, list(FINGERS)), part.k, mode=m, **kw)
     allocs = [make_alloc(m) for m in modes]
@@ -246,6 +250,11 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     lifted = end_center[:, 2]-start_center[:, 2]
     lost = ~log['has'][-30:].all(axis=(0, 2))
     dropped = (lifted < .6*cfg.lift_m) | lost
+    if cfg.fail_rot_deg is not None:
+        after_lift = np.array([p in ('hold', 'shake', 'rest') for p in log['phase']])
+        turned = log['obj_rot_deg'][after_lift].max(0) > cfg.fail_rot_deg if after_lift.any() else np.zeros(E, bool)
+        log['turned'] = turned
+        dropped = dropped | turned
     broke = judge.broken.copy()
     log.update(lifted_m=lifted, feasible=feasible)
     return TrialResult(broke=broke, dropped=dropped & ~broke, success=~broke & ~dropped, events=judge.event,

@@ -59,6 +59,9 @@ def main():
     ap.add_argument('--risk-safety', type=float, default=None,
                     help='soft slip-margin target for the belief-aware methods (vlm/model/prior/oracle): they take '
                          'as much margin as the damage budget allows (e.g. 4). Default: --safety, like equal/tactile')
+    ap.add_argument('--fail-rot-deg', type=float, default=30.,
+                    help='count an object turned more than this in the hand after the lift as lost (dropped); '
+                         '<= 0 disables')
     ap.add_argument('--shake-s', type=float, default=0., help='disturbance after the hold: wrist shake duration')
     ap.add_argument('--shake-hz', type=float, default=3.)
     ap.add_argument('--shake-mm', type=float, default=8.)
@@ -118,7 +121,8 @@ def main():
     from risk_mvp.scene import quat_to_mat
     from risk_mvp.snapshot import swap_window
     cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=max(1, int(round(a.preload_s*60))),
-                      min_safety=a.min_safety, risk_safety=a.risk_safety, shake_ticks=int(round(a.shake_s*60)), shake_hz=a.shake_hz, shake_mm=a.shake_mm)
+                      min_safety=a.min_safety, risk_safety=a.risk_safety, shake_ticks=int(round(a.shake_s*60)), shake_hz=a.shake_hz, shake_mm=a.shake_mm,
+                      fail_rot_deg=a.fail_rot_deg if a.fail_rot_deg > 0 else None)
     pts = {f: np.array(snap['contacts'][f]['point_obj']) for f in FINGERS}
     nrms = {f: safe_normal(np.array(snap['contacts'][f]['normal_obj'], float), pts[f]) for f in FINGERS}
     eqf, wi, wm = swap_window(pts, nrms, quat_to_mat(snap['obj_quat']), mass=a.mass, mu=a.mu_hat, safety=a.safety,
