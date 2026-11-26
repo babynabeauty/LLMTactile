@@ -182,8 +182,13 @@ class Allocator:
         return report
 
 
-def gravity_wrench(mass_kg: float, R_obj_to_world: np.ndarray, accel_world=(0., 0., 0.), g=9.81) -> np.ndarray:
-    """External wrench on the object (object frame) from gravity and the commanded lift acceleration
-    (d'Alembert): w = m (g_vec - a). Applied at the COM, so the torque part is zero."""
+def gravity_wrench(mass_kg: float, R_obj_to_world: np.ndarray, accel_world=(0., 0., 0.), g=9.81,
+                   com=None) -> np.ndarray:
+    """External wrench on the object (object frame, about the object-frame origin) from gravity and the
+    commanded lift acceleration (d'Alembert): w = m (g_vec - a), applied at com (object frame; None: the
+    origin, zero torque). The simulator puts the COM at the convex-hull centroid, up to ~3 mm above the
+    bounding-box centre for the cups: no torque upright, but a growing one once the object tilts."""
     fw = mass_kg*(np.array([0., 0., -g])-np.asarray(accel_world, float))
-    return np.r_[R_obj_to_world.T@fw, np.zeros(3)]
+    f = R_obj_to_world.T@fw
+    tau = np.zeros(3) if com is None else np.cross(np.asarray(com, float), f)
+    return np.r_[f, tau]

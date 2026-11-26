@@ -118,6 +118,9 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
             if cfg.risk_safety and m in ('risk', 'oracle', 'cap') else {}
         return Allocator(Contacts(pos, nrm, reg, list(FINGERS)), part.k, mode=m, **kw)
     allocs = [make_alloc(m) for m in modes]
+    # the simulator's centre of mass (convex-hull centroid, object frame) for the gravity torque
+    info = getattr(sc, 'info', None)
+    com_obj = np.asarray(info['mesh'].convex_hull.center_mass, float) if info and 'mesh' in info else None
     ctrl = {f: BatchForceController(E) for f in FINGERS}
     for f in FINGERS:
         ctrl[f].in_contact[:] = True
@@ -180,7 +183,7 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
         center, R = sc.object_pose()
         if t >= S and (t-S) % cfg.alloc_every == 0:
             for e in range(E):
-                w = gravity_wrench(mass[e]*(1+cfg.mass_margin), R[e])
+                w = gravity_wrench(mass[e]*(1+cfg.mass_margin), R[e], com=com_obj)
                 soft = cfg.risk_safety if cfg.risk_safety and modes[e] in ('risk', 'oracle', 'cap') else cfg.safety
                 kw = dict(w_ext=w, mu=cfg.mu_hat/cfg.min_safety, fmax=cfg.fmax_N, margin=cfg.margin_N,
                           safety=max(1., soft/cfg.min_safety))             # soft cone at mu_hat / soft
