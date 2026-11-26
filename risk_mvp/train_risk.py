@@ -116,6 +116,8 @@ def main():
     ap.add_argument('--max-rot-deg', type=float, default=20.)
     ap.add_argument('--steps', type=int, default=4000, help='collect data: optimiser steps')
     ap.add_argument('--seed', type=int, default=0, help='collect data: split and training seed')
+    ap.add_argument('--no-vlm', action='store_true',
+                    help="collect data: withhold Astra's answers from the cards (the without-VLM model)")
     ap.add_argument('--val-objects', nargs='*', default=None,
                     help='collect data: hold these objects out (unseen-object test) instead of random instances')
     ap.add_argument('--no-prior-features', action='store_true',
@@ -207,7 +209,7 @@ def main_collect(a):
     cfg = RiskConfig() if a.no_prior_features else collect_config()
     t0 = time.time()
     log = lambda m: print(f'[{time.time()-t0:6.0f}s] {m}', flush=True)
-    split = dict(seed=a.seed, val_objects=a.val_objects)
+    split = dict(seed=a.seed, val_objects=a.val_objects, no_vlm=a.no_vlm)
     train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg, **split)
     log(f'data: {info}')
     model = train(train_s, cfg, a.epochs, log=log, steps=a.steps, seed=a.seed)
@@ -226,7 +228,7 @@ def main_collect(a):
         log(f"archive {n:2d}: model err {curve[n]['model']['median_log_err']:.3f} nll {curve[n]['model']['nll']:.3f}"
             f" | prior err {curve[n]['prior']['median_log_err']:.3f} nll {curve[n]['prior']['nll']:.3f}")
     report['archive_curve'] = curve
-    torch.save(dict(state=model.state_dict(), cfg=cfg.__dict__), a.out/'risk_collect.pt')
+    torch.save(dict(state=model.state_dict(), cfg=cfg.__dict__, no_vlm=a.no_vlm), a.out/'risk_collect.pt')
     (a.out/'report.json').write_text(json.dumps(report, indent=1)+'\n')
     print(f"{'':22s}{'model err':>10s}{'prior err':>10s}{'model nll':>10s}{'prior nll':>10s}   n")
     for c in ('plain', 'visible', 'hidden', 'decoy'):

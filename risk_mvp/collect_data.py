@@ -91,11 +91,53 @@ def load_episodes(collect_dir: Path, max_rot_deg: float = 20.):
     return eps, inst, traces
 
 
+def instance_obj(rec: dict, oid: str, cfg: RiskConfig, sigma: float = .5, no_vlm: bool = False):
+    """(obj dict, VLM part of the region cards (k, N_LABELS+1+text_dim), extra prior features) for one
+    instance record (collect.py instances.json / eval). no_vlm: Astra's answers withheld (label normal,
+    confidence 0, no reason, the object-agnostic class prior) - the 'without the VLM' ablation."""
+    k = len(rec['thresholds_N'])
+    label = np.full(k, LABEL_ID['normal'])
+    conf = np.zeros(k)
+    text = np.zeros((k, cfg.text_dim))
+    vlm, vlm_object = ({}, {}) if no_vlm else (rec['vlm'], rec['vlm_object'])
+    for r, v in vlm.items():
+        r = int(r)
+        label[r], conf[r] = LABEL_ID[v['label']], v['confidence']
+        text[r] = text_embedding(v.get('reason', ''), cfg.text_dim)
+    obj = dict(thr=np.array(rec['thresholds_N']), label=label, conf=conf, condition=rec['condition'], oid=oid,
+               instance=rec.get('instance'), variant=rec['variant'], vlm=vlm, vlm_object=vlm_object)
+    extra = prior_features(obj, k, sigma) if cfg.extra_dim else np.zeros((k, 0))
+    return obj, np.concatenate([np.eye(N_LABELS)[label], conf[:, None], text], 1), extra
+
+
+def settle_features(fn, ft, regF, finger_region: dict, k: int):
+    """(tactile features (k, TACT_DIM), {region: force history}) from the settle phase of one grasp.
+    fn, ft (T, 3) per finger and regF (T, K), sampled every 2nd tick from the start."""
+    tact = np.zeros((k, TACT_DIM))
+    for j, f in enumerate(FINGERS):
+        r = finger_region[f]
+        s_fn, s_ft = fn[:SETTLE_SAMPLES, j], ft[:SETTLE_SAMPLES, j]
+        tact[r] = [np.mean(s_ft/np.maximum(s_fn, 1e-3)), np.mean(s_fn > .05), 0.]
+    return tact, {r: resample(regF[:SETTLE_SAMPLES, r], HIST_LEN) for r in range(k)}
+
+
+def archive_rows_of(episode_archive: list, hist: dict) -> list:
+    """Label rows (as synthetic.World.grasp) from a DamageJudge archive."""
+    rows = []
+    for a in episode_archive:
+        r = a['region']
+        broke = a['outcome'] == 'broke'
+        rows.append(dict(region=r, broke=broke, lower=max(a['lower_N'], 1e-3), upper=a['upper_N'] if broke else np.inf,
+                         max_force=a['max_force_N'], hist=hist[r]))
+    return rows
+
+
 def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), max_rot_deg: float = 20.,
-          val_frac: float = .2, seed: int = 0, n_archive=None, sigma: float = .5, val_objects=None):
+          val_frac: float = .2, seed: int = 0, n_archive=None, sigma: float = .5, val_objects=None,
+          no_vlm: bool = False):
     """Returns (train samples, val samples, info). n_archive None: random 0..10 per sample.
     val_objects: hold these objects out entirely (generalisation to unseen objects) instead of a random
-    val_frac of the instances."""
+    val_frac of the instances. no_vlm: Astra's answers withheld from every card (ablation)."""
     eps, inst, traces = load_episodes(collect_dir, max_rot_deg)
     manifest = json.loads((Path(appearance)/'manifest.json').read_text())
     rng = np.random.default_rng(seed)
@@ -115,51 +157,27 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
         oid, i = key
         rec = inst[oid][i]
         k = len(rec['thresholds_N'])
-        label = np.full(k, LABEL_ID['normal'])
-        conf = np.zeros(k)
-        text = np.zeros((k, cfg.text_dim))
-        for r, v in rec['vlm'].items():
-            r = int(r)
-            label[r], conf[r] = LABEL_ID[v['label']], v['confidence']
-            text[r] = text_embedding(v.get('reason', ''), cfg.text_dim)
-        obj = dict(thr=np.array(rec['thresholds_N']), label=label, conf=conf, condition=rec['condition'],
-                   oid=oid, instance=i, variant=rec['variant'], vlm=rec['vlm'], vlm_object=rec['vlm_object'])
+        obj, vlm_part, extra = instance_obj(rec, oid, cfg, sigma, no_vlm)
         G = geom[oid]
-        extra = prior_features(obj, k, sigma) if cfg.extra_dim else np.zeros((k, 0))
         if G.shape[0] != k:
             raise ValueError(f'{oid}: manifest has {G.shape[0]} regions, instances {k}')
         grasps = by_inst[key]
-        rows_of = []
-        cards_of = []
+        rows_of, cards_of = [], []
         for e in grasps:
             tr = traces[oid]
             t = e['trace_index']
-            regF = tr['region_F'][t].astype(float)                      # (T/2, K)
-            fn, ft = tr['fn'][t].astype(float), tr['ft'][t].astype(float)
-            tact = np.zeros((k, TACT_DIM))
-            for j, f in enumerate(FINGERS):
-                r = e['finger_region'][f]
-                s_fn, s_ft = fn[:SETTLE_SAMPLES, j], ft[:SETTLE_SAMPLES, j]
-                tact[r] = [np.mean(s_ft/np.maximum(s_fn, 1e-3)), np.mean(s_fn > .05), 0.]
-            cards = np.concatenate([np.eye(N_LABELS)[label], conf[:, None], text, G, tact, extra], 1).astype(np.float32)
-            hist = {r: resample(regF[:SETTLE_SAMPLES, r], HIST_LEN) for r in range(k)}
-            rows = []
-            for a in e['archive']:
-                r = a['region']
-                broke = a['outcome'] == 'broke'
-                rows.append(dict(region=r, broke=broke, lower=max(a['lower_N'], 1e-3),
-                                 upper=a['upper_N'] if broke else np.inf, max_force=a['max_force_N'],
-                                 hist=hist[r]))
-            rows_of.append(rows)
-            cards_of.append(cards)
+            tact, hist = settle_features(tr['fn'][t].astype(float), tr['ft'][t].astype(float),
+                                         tr['region_F'][t].astype(float), e['finger_region'], k)
+            cards_of.append(np.concatenate([vlm_part, G, tact, extra], 1).astype(np.float32))
+            rows_of.append(archive_rows_of(e['archive'], hist))
         for g in range(len(grasps)):
             pool = [row for h, rows in enumerate(rows_of) if h != g for row in rows]
             n = rng.integers(0, min(10, len(pool))+1) if n_archive is None else min(n_archive, len(pool))
             pick = rng.choice(len(pool), size=n, replace=False) if n else []
-            arc = [archive_row(G, label, conf, pool[j]) for j in pick]
+            arc = [archive_row(G, obj['label'], obj['conf'], pool[j]) for j in pick]
             s = dict(obj=obj, cards=cards_of[g], rows=rows_of[g], archive=arc, policy=grasps[g]['policy'],
                      scale=grasps[g]['scale'],
-                     pool=[archive_row(G, label, conf, row) for row in pool])   # to redraw the archive per batch
+                     pool=[archive_row(G, obj['label'], obj['conf'], row) for row in pool])  # redrawn per batch
             (val if key in val_keys else train).append(s)
     info = dict(episodes=len(eps), instances=len(keys), val_instances=len(val_keys),
                 train_samples=len(train), val_samples=len(val))
