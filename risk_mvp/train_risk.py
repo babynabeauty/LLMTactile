@@ -53,8 +53,11 @@ def redraw_archive(s, rng):
     return dict(s, archive=[pool[j] for j in rng.choice(len(pool), size=n, replace=False)] if n else [])
 
 
-def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0, log=None, steps=None):
-    """steps: total optimiser steps (overrides epochs)."""
+def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0, log=None, steps=None,
+          vlm_dropout=0.):
+    """steps: total optimiser steps (overrides epochs). vlm_dropout: probability per sample and batch of
+    using its Astra-withheld cards (sample['alt']), so the model learns both with and without the VLM and
+    weighs Astra against geometry and the archive instead of following it."""
     torch.manual_seed(seed)
     model = RiskModel(cfg).to(DEVICE)
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
@@ -69,7 +72,10 @@ def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0
         losses = []
         model.train()
         for i in range(0, len(order), batch_size):
-            b = to_device(collate([redraw_archive(samples[j], rng) for j in order[i:i+batch_size]], cfg))
+            pick = [samples[j] for j in order[i:i+batch_size]]
+            if vlm_dropout:
+                pick = [dict(s, **s['alt']) if 'alt' in s and rng.random() < vlm_dropout else s for s in pick]
+            b = to_device(collate([redraw_archive(s, rng) for s in pick], cfg))
             H = run_model(model, b)
             if open_book:
                 loss = censored_nll(H, None, None, None, b['mask'], exact=b['thr'])
@@ -124,6 +130,8 @@ def main():
     ap.add_argument('--max-rot-deg', type=float, default=20.)
     ap.add_argument('--steps', type=int, default=4000, help='collect data: optimiser steps')
     ap.add_argument('--seed', type=int, default=0, help='collect data: split and training seed')
+    ap.add_argument('--vlm-dropout', type=float, default=0.,
+                    help='collect data: probability of training a sample with Astra withheld (e.g. 0.3)')
     ap.add_argument('--no-vlm', action='store_true',
                     help="collect data: withhold Astra's answers from the cards (the without-VLM model)")
     ap.add_argument('--val-objects', nargs='*', default=None,
@@ -218,9 +226,10 @@ def main_collect(a):
     t0 = time.time()
     log = lambda m: print(f'[{time.time()-t0:6.0f}s] {m}', flush=True)
     split = dict(seed=a.seed, val_objects=a.val_objects, no_vlm=a.no_vlm)
-    train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg, **split)
+    train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg,
+                                 keep_novlm=a.vlm_dropout > 0, **split)
     log(f'data: {info}, device {DEVICE}')
-    model = train(train_s, cfg, a.epochs, log=log, steps=a.steps, seed=a.seed)
+    model = train(train_s, cfg, a.epochs, log=log, steps=a.steps, seed=a.seed, vlm_dropout=a.vlm_dropout)
     report = dict(config={k: str(v) for k, v in vars(a).items()}, data=info)
     rows = compare(model, val_s, cfg)
     report['overall'] = summarise_rows(rows, ['who'])

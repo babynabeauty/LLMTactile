@@ -134,10 +134,11 @@ def archive_rows_of(episode_archive: list, hist: dict) -> list:
 
 def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), max_rot_deg: float = 20.,
           val_frac: float = .2, seed: int = 0, n_archive=None, sigma: float = .5, val_objects=None,
-          no_vlm: bool = False):
+          no_vlm: bool = False, keep_novlm: bool = False):
     """Returns (train samples, val samples, info). n_archive None: random 0..10 per sample.
     val_objects: hold these objects out entirely (generalisation to unseen objects) instead of a random
-    val_frac of the instances. no_vlm: Astra's answers withheld from every card (ablation)."""
+    val_frac of the instances. no_vlm: Astra's answers withheld from every card (ablation). keep_novlm: also
+    store the cards and archive pool with Astra withheld (sample['alt']) for VLM dropout in training."""
     eps, inst, traces = load_episodes(collect_dir, max_rot_deg)
     manifest = json.loads((Path(appearance)/'manifest.json').read_text())
     rng = np.random.default_rng(seed)
@@ -158,17 +159,21 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
         rec = inst[oid][i]
         k = len(rec['thresholds_N'])
         obj, vlm_part, extra = instance_obj(rec, oid, cfg, sigma, no_vlm)
+        if keep_novlm:
+            obj_n, vlm_part_n, extra_n = instance_obj(rec, oid, cfg, sigma, True)
         G = geom[oid]
         if G.shape[0] != k:
             raise ValueError(f'{oid}: manifest has {G.shape[0]} regions, instances {k}')
         grasps = by_inst[key]
-        rows_of, cards_of = [], []
+        rows_of, cards_of, cards_n_of = [], [], []
         for e in grasps:
             tr = traces[oid]
             t = e['trace_index']
             tact, hist = settle_features(tr['fn'][t].astype(float), tr['ft'][t].astype(float),
                                          tr['region_F'][t].astype(float), e['finger_region'], k)
             cards_of.append(np.concatenate([vlm_part, G, tact, extra], 1).astype(np.float32))
+            if keep_novlm:
+                cards_n_of.append(np.concatenate([vlm_part_n, G, tact, extra_n], 1).astype(np.float32))
             rows_of.append(archive_rows_of(e['archive'], hist))
         for g in range(len(grasps)):
             pool = [row for h, rows in enumerate(rows_of) if h != g for row in rows]
@@ -178,6 +183,9 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
             s = dict(obj=obj, cards=cards_of[g], rows=rows_of[g], archive=arc, policy=grasps[g]['policy'],
                      scale=grasps[g]['scale'],
                      pool=[archive_row(G, obj['label'], obj['conf'], row) for row in pool])  # redrawn per batch
+            if keep_novlm:
+                s['alt'] = dict(cards=cards_n_of[g],
+                                pool=[archive_row(G, obj_n['label'], obj_n['conf'], row) for row in pool])
             (val if key in val_keys else train).append(s)
     info = dict(episodes=len(eps), instances=len(keys), val_instances=len(val_keys),
                 train_samples=len(train), val_samples=len(val))
