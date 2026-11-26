@@ -62,13 +62,15 @@ def build_attention_mask(n_arc: int, n_reg: int, arc_valid: torch.Tensor, reg_va
     """Float mask (B*heads, L, L), 0 = allowed, -inf = blocked; sequence order [trust, archive, regions]."""
     B = arc_valid.shape[0]
     L = 1+n_arc+n_reg
-    kind = torch.cat([torch.zeros(1), torch.ones(n_arc), 2*torch.ones(n_reg)]).long()   # 0 trust, 1 arc, 2 reg
+    dev = arc_valid.device                     # build on the inputs' device (GPU training)
+    kind = torch.cat([torch.zeros(1, device=dev), torch.ones(n_arc, device=dev),
+                      2*torch.ones(n_reg, device=dev)]).long()   # 0 trust, 1 arc, 2 reg
     q, k = kind[:, None], kind[None, :]
     allowed = ((q == 1) & (k == 1)) | ((q == 0) & (k <= 1)) | (q == 2)
-    key_valid = torch.cat([torch.ones(B, 1, dtype=torch.bool), arc_valid, reg_valid], 1)   # (B, L)
+    key_valid = torch.cat([torch.ones(B, 1, dtype=torch.bool, device=dev), arc_valid.bool(), reg_valid.bool()], 1)
     allowed = allowed[None] & key_valid[:, None, :]
-    allowed = allowed | torch.eye(L, dtype=torch.bool)[None]   # every token sees itself (no empty rows)
-    mask = torch.zeros(B, L, L).masked_fill(~allowed, float('-inf'))
+    allowed = allowed | torch.eye(L, dtype=torch.bool, device=dev)[None]   # every token sees itself (no empty rows)
+    mask = torch.zeros(B, L, L, device=dev).masked_fill(~allowed, float('-inf'))
     return mask.repeat_interleave(n_heads, 0)
 
 
