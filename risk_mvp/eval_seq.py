@@ -31,9 +31,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 FINGERS = ('thumb', 'index', 'middle')
-# objects where the methods differ: 065-a every method held (no contrast), plum nearly no method could
-# (its grasp barely holds and its thresholds are tiny); evaluate those separately
-STABLE_OBJECTS = ['015_peach', '056_tennis_ball', '061_foam_brick', '065-d_cups']
+# Plum: its grasp barely holds and its thresholds are tiny, nearly no method could (evaluate separately).
+# Foam brick: its grasp (never lifted in the pregrasp search) turned 36-50 deg in the hand under every method
+# once the shake test was on. 065-a: every method held without the shake; with it the methods differ.
+STABLE_OBJECTS = ['015_peach', '056_tennis_ball', '065-d_cups', '065-a_cups']
 
 
 def load_model(path):
