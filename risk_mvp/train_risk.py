@@ -115,6 +115,9 @@ def main():
     ap.add_argument('--appearance', type=Path, default=Path('outputs/risk_mvp/appearance'))
     ap.add_argument('--max-rot-deg', type=float, default=20.)
     ap.add_argument('--steps', type=int, default=4000, help='collect data: optimiser steps')
+    ap.add_argument('--seed', type=int, default=0, help='collect data: split and training seed')
+    ap.add_argument('--val-objects', nargs='*', default=None,
+                    help='collect data: hold these objects out (unseen-object test) instead of random instances')
     ap.add_argument('--no-prior-features', action='store_true',
                     help='collect data: leave the handwritten prior out of the region cards (ablation)')
     a = ap.parse_args()
@@ -204,9 +207,10 @@ def main_collect(a):
     cfg = RiskConfig() if a.no_prior_features else collect_config()
     t0 = time.time()
     log = lambda m: print(f'[{time.time()-t0:6.0f}s] {m}', flush=True)
-    train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg)
+    split = dict(seed=a.seed, val_objects=a.val_objects)
+    train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg, **split)
     log(f'data: {info}')
-    model = train(train_s, cfg, a.epochs, log=log, steps=a.steps)
+    model = train(train_s, cfg, a.epochs, log=log, steps=a.steps, seed=a.seed)
     report = dict(config={k: str(v) for k, v in vars(a).items()}, data=info)
     rows = compare(model, val_s, cfg)
     report['overall'] = summarise_rows(rows, ['who'])
@@ -214,7 +218,7 @@ def main_collect(a):
     report['by_object'] = summarise_rows(rows, ['who', 'oid'])
     curve = {}
     for n in (0, 1, 2, 4, 6, 10):
-        _, vs, _ = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg, n_archive=n)
+        _, vs, _ = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg, n_archive=n, **split)
         r = compare(model, vs, cfg)
         curve[n] = dict(model=summarise_rows([x for x in r if x['who'] == 'model'], ['who'])['model'],
                         model_by_condition=summarise_rows([x for x in r if x['who'] == 'model'], ['condition']),

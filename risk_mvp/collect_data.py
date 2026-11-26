@@ -92,8 +92,10 @@ def load_episodes(collect_dir: Path, max_rot_deg: float = 20.):
 
 
 def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), max_rot_deg: float = 20.,
-          val_frac: float = .2, seed: int = 0, n_archive=None, sigma: float = .5):
-    """Returns (train samples, val samples, info). n_archive None: random 0..10 per sample."""
+          val_frac: float = .2, seed: int = 0, n_archive=None, sigma: float = .5, val_objects=None):
+    """Returns (train samples, val samples, info). n_archive None: random 0..10 per sample.
+    val_objects: hold these objects out entirely (generalisation to unseen objects) instead of a random
+    val_frac of the instances."""
     eps, inst, traces = load_episodes(collect_dir, max_rot_deg)
     manifest = json.loads((Path(appearance)/'manifest.json').read_text())
     rng = np.random.default_rng(seed)
@@ -102,8 +104,11 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
         by_inst[(e['object'], e['instance'])].append(e)
     keys = sorted(by_inst)
     perm = rng.permutation(len(keys))
-    n_val = int(round(val_frac*len(keys)))
-    val_keys = {keys[i] for i in perm[:n_val]}
+    if val_objects:
+        val_keys = {k for k in keys if k[0] in set(val_objects)}
+    else:
+        n_val = int(round(val_frac*len(keys)))
+        val_keys = {keys[i] for i in perm[:n_val]}
     geom = {oid: region_features(m) for oid, m in manifest.items()}
     train, val = [], []
     for key in keys:
