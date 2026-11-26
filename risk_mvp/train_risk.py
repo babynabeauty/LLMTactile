@@ -31,7 +31,15 @@ from risk_mvp.risk_model import RiskConfig, RiskModel, censored_nll, median_thre
 from risk_mvp.synthetic import World, collate  # noqa: E402
 
 
+DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+
+def to_device(batch, device=None):
+    return {k: v.to(device or DEVICE) for k, v in batch.items()}
+
+
 def run_model(model, batch):
+    batch = to_device(batch, next(model.parameters()).device)
     return model(batch['region'], batch['hist'], batch['reg_valid'], batch['archive'], batch['arc_valid'])
 
 
@@ -48,7 +56,7 @@ def redraw_archive(s, rng):
 def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0, log=None, steps=None):
     """steps: total optimiser steps (overrides epochs)."""
     torch.manual_seed(seed)
-    model = RiskModel(cfg)
+    model = RiskModel(cfg).to(DEVICE)
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     rng = np.random.default_rng(seed)
     per_epoch = int(np.ceil(len(samples)/batch_size))
@@ -61,7 +69,7 @@ def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0
         losses = []
         model.train()
         for i in range(0, len(order), batch_size):
-            b = collate([redraw_archive(samples[j], rng) for j in order[i:i+batch_size]], cfg)
+            b = to_device(collate([redraw_archive(samples[j], rng) for j in order[i:i+batch_size]], cfg))
             H = run_model(model, b)
             if open_book:
                 loss = censored_nll(H, None, None, None, b['mask'], exact=b['thr'])
@@ -82,7 +90,7 @@ def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0
 def log_error(model, samples, cfg, which='labelled'):
     errs = []
     for i in range(0, len(samples), 256):
-        b = collate(samples[i:i+256], cfg)
+        b = to_device(collate(samples[i:i+256], cfg))
         med = median_threshold(run_model(model, b))
         e = torch.abs(torch.log(med.clamp_min(1e-3)/b['thr']))
         m = b['mask'] > 0 if which == 'labelled' else b['reg_valid']
@@ -93,7 +101,7 @@ def log_error(model, samples, cfg, which='labelled'):
 @torch.no_grad()
 def label_sensitivity(model, samples, cfg):
     """Median |log ratio| of predicted median when the labelled regions' VLM label is flipped (0<->2)."""
-    b = collate(samples, cfg)
+    b = to_device(collate(samples, cfg))
     base = median_threshold(run_model(model, b))
     region = b['region'].clone()
     lab = region[..., :N_LABELS]
@@ -159,7 +167,7 @@ def main():
         a=c['a_censored_vs_open_book']['censored_median_abs_log_err'] < 1.5*c['a_censored_vs_open_book']['open_book_median_abs_log_err']+.05,
         b=curve[10] < curve[0],
         c=c['c_vlm_label_dependence']['wrong_vlm_archive10'] < c['c_vlm_label_dependence']['wrong_vlm_archive0'])
-    torch.save(dict(state=cens.state_dict(), cfg=cfg.__dict__), a.out/'risk_censored.pt')
+    torch.save(dict(state={k: v.cpu() for k, v in cens.state_dict().items()}, cfg=cfg.__dict__), a.out/'risk_censored.pt')
     (a.out/'report.json').write_text(json.dumps(report, indent=1)+'\n')
     log(json.dumps(report['checks'], indent=1))
     log(f'pass: {report["pass"]}')
@@ -174,12 +182,12 @@ def compare(model, samples, cfg, sigma=.5):
     out = []
     for i in range(0, len(samples), 256):
         ss = samples[i:i+256]
-        b = collate(ss, cfg)
+        b = to_device(collate(ss, cfg))
         H = run_model(model, b)
         Hp = torch.zeros_like(H)
         for j, s in enumerate(ss):
             k = s['cards'].shape[0]
-            Hp[j, :k] = torch.as_tensor(prior_hazard(s['obj'], k, sigma), dtype=H.dtype)
+            Hp[j, :k] = torch.as_tensor(prior_hazard(s['obj'], k, sigma), dtype=H.dtype, device=H.device)
         for name, HH in (('model', H), ('prior', Hp)):
             med = median_threshold(HH)
             err = torch.abs(torch.log(med.clamp_min(1e-3)/b['thr']))
@@ -211,7 +219,7 @@ def main_collect(a):
     log = lambda m: print(f'[{time.time()-t0:6.0f}s] {m}', flush=True)
     split = dict(seed=a.seed, val_objects=a.val_objects, no_vlm=a.no_vlm)
     train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg, **split)
-    log(f'data: {info}')
+    log(f'data: {info}, device {DEVICE}')
     model = train(train_s, cfg, a.epochs, log=log, steps=a.steps, seed=a.seed)
     report = dict(config={k: str(v) for k, v in vars(a).items()}, data=info)
     rows = compare(model, val_s, cfg)
@@ -228,7 +236,8 @@ def main_collect(a):
         log(f"archive {n:2d}: model err {curve[n]['model']['median_log_err']:.3f} nll {curve[n]['model']['nll']:.3f}"
             f" | prior err {curve[n]['prior']['median_log_err']:.3f} nll {curve[n]['prior']['nll']:.3f}")
     report['archive_curve'] = curve
-    torch.save(dict(state=model.state_dict(), cfg=cfg.__dict__, no_vlm=a.no_vlm), a.out/'risk_collect.pt')
+    torch.save(dict(state={k: v.cpu() for k, v in model.state_dict().items()}, cfg=cfg.__dict__, no_vlm=a.no_vlm),
+               a.out/'risk_collect.pt')
     (a.out/'report.json').write_text(json.dumps(report, indent=1)+'\n')
     print(f"{'':22s}{'model err':>10s}{'prior err':>10s}{'model nll':>10s}{'prior nll':>10s}   n")
     for c in ('plain', 'visible', 'hidden', 'decoy'):
