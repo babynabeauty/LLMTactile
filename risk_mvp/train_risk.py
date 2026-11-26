@@ -35,19 +35,33 @@ def run_model(model, batch):
     return model(batch['region'], batch['hist'], batch['reg_valid'], batch['archive'], batch['arc_valid'])
 
 
-def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0, log=None):
+def redraw_archive(s, rng):
+    """A fresh random archive (0..10 cards from the sample's pool of other grasps), for samples that carry
+    one (collect data): every batch sees a different archive, so the model has to learn to use it."""
+    if 'pool' not in s:
+        return s
+    pool = s['pool']
+    n = int(rng.integers(0, min(10, len(pool))+1))
+    return dict(s, archive=[pool[j] for j in rng.choice(len(pool), size=n, replace=False)] if n else [])
+
+
+def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0, log=None, steps=None):
+    """steps: total optimiser steps (overrides epochs)."""
     torch.manual_seed(seed)
     model = RiskModel(cfg)
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     rng = np.random.default_rng(seed)
-    steps = epochs*int(np.ceil(len(samples)/batch_size))
+    per_epoch = int(np.ceil(len(samples)/batch_size))
+    if steps:
+        epochs = int(np.ceil(steps/per_epoch))
+    steps = epochs*per_epoch
     sched = torch.optim.lr_scheduler.OneCycleLR(opt, max_lr=lr, total_steps=steps)
     for ep in range(epochs):
         order = rng.permutation(len(samples))
         losses = []
         model.train()
         for i in range(0, len(order), batch_size):
-            b = collate([samples[j] for j in order[i:i+batch_size]], cfg)
+            b = collate([redraw_archive(samples[j], rng) for j in order[i:i+batch_size]], cfg)
             H = run_model(model, b)
             if open_book:
                 loss = censored_nll(H, None, None, None, b['mask'], exact=b['thr'])
@@ -59,7 +73,7 @@ def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0
             opt.step()
             sched.step()
             losses.append(loss.item())
-        if log:
+        if log and (epochs <= 20 or (ep+1) % max(1, epochs//20) == 0 or ep == epochs-1):
             log(f'{"open-book" if open_book else "censored"} epoch {ep+1}/{epochs} loss {np.mean(losses):.4f}')
     return model.eval()
 
@@ -100,6 +114,9 @@ def main():
     ap.add_argument('--collect', type=Path, default=Path('outputs/risk_mvp/collect'))
     ap.add_argument('--appearance', type=Path, default=Path('outputs/risk_mvp/appearance'))
     ap.add_argument('--max-rot-deg', type=float, default=20.)
+    ap.add_argument('--steps', type=int, default=4000, help='collect data: optimiser steps')
+    ap.add_argument('--no-prior-features', action='store_true',
+                    help='collect data: leave the handwritten prior out of the region cards (ablation)')
     a = ap.parse_args()
     if a.data == 'collect':
         return main_collect(a)
@@ -182,14 +199,14 @@ def summarise_rows(rows, keys):
 
 
 def main_collect(a):
-    from risk_mvp.collect_data import build
+    from risk_mvp.collect_data import build, collect_config
     a.out.mkdir(parents=True, exist_ok=True)
-    cfg = RiskConfig()
+    cfg = RiskConfig() if a.no_prior_features else collect_config()
     t0 = time.time()
     log = lambda m: print(f'[{time.time()-t0:6.0f}s] {m}', flush=True)
     train_s, val_s, info = build(a.collect, a.appearance, cfg, max_rot_deg=a.max_rot_deg)
     log(f'data: {info}')
-    model = train(train_s, cfg, a.epochs, log=log)
+    model = train(train_s, cfg, a.epochs, log=log, steps=a.steps)
     report = dict(config={k: str(v) for k, v in vars(a).items()}, data=info)
     rows = compare(model, val_s, cfg)
     report['overall'] = summarise_rows(rows, ['who'])

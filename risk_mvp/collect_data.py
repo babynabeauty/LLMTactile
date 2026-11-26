@@ -27,6 +27,27 @@ import numpy as np
 
 from risk_mvp.risk_model import GEOM_DIM, HIST_LEN, N_LABELS, TACT_DIM, RiskConfig
 
+EXTRA_DIM = 6      # object strength one-hot (3), log object median, log prior median of the region, prior sigma
+
+
+def collect_config(**kw) -> RiskConfig:
+    return RiskConfig(extra_dim=EXTRA_DIM, **kw)
+
+
+def prior_features(obj: dict, k: int, sigma: float = .5) -> np.ndarray:
+    """(k, EXTRA_DIM): what the handwritten prior believes, so the model learns a correction to it
+    (without it the model had to recover the absolute strength from geometry alone and did worse than the
+    prior)."""
+    from risk_mvp import prior as P
+    lab = dict(object=obj['vlm_object'], regions=obj['vlm'])
+    med, conf = P.region_medians(lab, k)
+    o = obj['vlm_object'] or {}
+    rng = o.get('safe_force_N')
+    m_obj = float(np.sqrt(rng[0]*rng[1])) if rng and min(rng) > 0 else P.CLASS_MEDIAN_N.get(o.get('strength'), 3.2)
+    onehot = np.eye(N_LABELS)[LABEL_ID.get(o.get('strength'), 1)]
+    return np.concatenate([np.tile(onehot, (k, 1)), np.full((k, 1), np.log(m_obj)), np.log(med)[:, None],
+                           (sigma*(1+(1-conf)))[:, None]], 1)
+
 LABEL_ID = dict(fragile=0, normal=1, strong=2)
 FINGERS = ('thumb', 'index', 'middle')
 SETTLE_SAMPLES = 8          # collect.py keeps every 2nd tick; settle = 15 ticks
@@ -71,7 +92,7 @@ def load_episodes(collect_dir: Path, max_rot_deg: float = 20.):
 
 
 def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), max_rot_deg: float = 20.,
-          val_frac: float = .2, seed: int = 0, n_archive=None):
+          val_frac: float = .2, seed: int = 0, n_archive=None, sigma: float = .5):
     """Returns (train samples, val samples, info). n_archive None: random 0..10 per sample."""
     eps, inst, traces = load_episodes(collect_dir, max_rot_deg)
     manifest = json.loads((Path(appearance)/'manifest.json').read_text())
@@ -99,6 +120,7 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
         obj = dict(thr=np.array(rec['thresholds_N']), label=label, conf=conf, condition=rec['condition'],
                    oid=oid, instance=i, variant=rec['variant'], vlm=rec['vlm'], vlm_object=rec['vlm_object'])
         G = geom[oid]
+        extra = prior_features(obj, k, sigma) if cfg.extra_dim else np.zeros((k, 0))
         if G.shape[0] != k:
             raise ValueError(f'{oid}: manifest has {G.shape[0]} regions, instances {k}')
         grasps = by_inst[key]
@@ -114,7 +136,7 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
                 r = e['finger_region'][f]
                 s_fn, s_ft = fn[:SETTLE_SAMPLES, j], ft[:SETTLE_SAMPLES, j]
                 tact[r] = [np.mean(s_ft/np.maximum(s_fn, 1e-3)), np.mean(s_fn > .05), 0.]
-            cards = np.concatenate([np.eye(N_LABELS)[label], conf[:, None], text, G, tact], 1).astype(np.float32)
+            cards = np.concatenate([np.eye(N_LABELS)[label], conf[:, None], text, G, tact, extra], 1).astype(np.float32)
             hist = {r: resample(regF[:SETTLE_SAMPLES, r], HIST_LEN) for r in range(k)}
             rows = []
             for a in e['archive']:
@@ -131,7 +153,8 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
             pick = rng.choice(len(pool), size=n, replace=False) if n else []
             arc = [archive_row(G, label, conf, pool[j]) for j in pick]
             s = dict(obj=obj, cards=cards_of[g], rows=rows_of[g], archive=arc, policy=grasps[g]['policy'],
-                     scale=grasps[g]['scale'])
+                     scale=grasps[g]['scale'],
+                     pool=[archive_row(G, label, conf, row) for row in pool])   # to redraw the archive per batch
             (val if key in val_keys else train).append(s)
     info = dict(episodes=len(eps), instances=len(keys), val_instances=len(val_keys),
                 train_samples=len(train), val_samples=len(val))

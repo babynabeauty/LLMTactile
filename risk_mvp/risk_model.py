@@ -39,6 +39,8 @@ HIST_LEN = 30
 @dataclass
 class RiskConfig:
     text_dim: int = 32
+    extra_dim: int = 0          # extra region-card features appended at the end (collect data: the VLM's
+                                # object-level answer and the handwritten prior's median / spread per region)
     d_model: int = 128
     n_heads: int = 4
     n_layers: int = 2
@@ -47,7 +49,7 @@ class RiskConfig:
 
     @property
     def region_dim(self):
-        return N_LABELS+1+self.text_dim+GEOM_DIM+TACT_DIM
+        return N_LABELS+1+self.text_dim+GEOM_DIM+TACT_DIM+self.extra_dim
 
     @property
     def archive_dim(self):
