@@ -96,3 +96,14 @@ def test_sustained_force_after_settle_breaks():
     res = run_trial(sc, _snap(sc), FakePart(), ['equal'], thr, TrialConfig(), mass_kg=.15)
     assert res.broke.all()
     assert res.events[0]['step'] >= TrialConfig().settle_ticks
+
+
+def test_shake_and_rest_phases():
+    E = 1
+    sc = FakeScene(E, settle_spike=.8)
+    cfg = TrialConfig(shake_ticks=60, risk_safety=4.)
+    res = run_trial(sc, _snap(sc), FakePart(), ['oracle'], np.full((E, 3), 5.), cfg, mass_kg=.15)
+    ph = res.log['phase']
+    n = cfg.settle_ticks+cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
+    assert ph.count('shake') == 60 and ph.count('rest') == cfg.rest_ticks and len(ph) == n+60+cfg.rest_ticks
+    assert ph[n] == 'shake' and ph[-1] == 'rest'

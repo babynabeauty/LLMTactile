@@ -93,7 +93,8 @@ def run_object(oid, a, labels, manifest, models, rng, out):
     sc.set_friction(np.array([r['mu'] for r in inst]))
     fr = {f: snap['contacts'][f]['region'] for f in FINGERS}
     G = CD.region_features(manifest[oid])
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, min_safety=a.min_safety, oracle_margin_N=a.oracle_margin)
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, min_safety=a.min_safety, oracle_margin_N=a.oracle_margin,
+                      risk_safety=a.risk_safety, shake_ticks=int(round(a.shake_s*60)), shake_hz=a.shake_hz, shake_mm=a.shake_mm)
     # probe: settle phase only (same start forces for every method)
     probe = run_trial(sc, snap, part, ['equal']*E, thr, TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=1,
                                                                       lift_ticks=1, hold_ticks=1), mass_kg=mass)
@@ -213,6 +214,12 @@ def main():
                     help='hard cone at mu_hat / min_safety for every method (1: none; then the risk allocators '
                          'and the oracle dropped 19-36 %% of the grasps)')
     ap.add_argument('--sigma', type=float, default=.5)
+    ap.add_argument('--risk-safety', type=float, default=None,
+                    help='soft slip-margin target for the belief-aware methods (vlm/model/prior/oracle): they take '
+                         'as much margin as the damage budget allows (e.g. 4). Default: --safety, like equal/tactile')
+    ap.add_argument('--shake-s', type=float, default=0., help='disturbance after the hold: wrist shake duration')
+    ap.add_argument('--shake-hz', type=float, default=3.)
+    ap.add_argument('--shake-mm', type=float, default=8.)
     ap.add_argument('--oracle-margin', type=float, default=.25,
                     help='N below the true thresholds for the oracle (about the force-tracking error; 0.1 N left it '
                          'breaking 11-17 %% on peach, 065-d and the foam brick)')

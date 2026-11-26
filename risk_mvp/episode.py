@@ -51,6 +51,14 @@ class TrialConfig:
                                   # With 1 the risk allocators (and the oracle) gave up the whole margin when
                                   # the belief was tight and dropped 19-36 % of the grasps (eval_seq): the point
                                   # contact model leaves out in-hand rotation, lift acceleration, tracking error
+    risk_safety: float = None     # soft-cone target for the belief-aware modes (risk / oracle / cap): with a higher
+                                  # target they take as much slip margin as the damage budget allows (an accurate
+                                  # belief buys margin, a pessimistic one does not). None: safety, as equal/tactile.
+                                  # With it set, these modes weigh missing margin at risk_slip_weight (vs 10) and
+                                  # the damage-budget slack at 1000: hold the object >> stay within the budget >>
+                                  # buy margin, so margin is bought until the budget binds (CPU check: strong
+                                  # belief thumb 2.4 N, pessimistic 1.3 N, weak side still unloaded)
+    risk_slip_weight: float = 100.
     margin_N: float = .1          # force-estimate margin in the damage constraint
     oracle_margin_N: float = None  # the oracle's margin under the true thresholds (None: margin_N). 0.1 N is
                                    # below the force-tracking error: the oracle broke 11-17 % (eval_seq)
@@ -68,6 +76,10 @@ class TrialConfig:
     preload_ticks: int = 60        # 1 s: with 0.5 s the thumb ramping up pushed index/middle ~0.1 N over target
                                    # before the force controller caught up (065-d oracle broke 5/16)
     lift_ticks: int = 60
+    shake_ticks: int = 0           # disturbance after the hold: the wrist shakes sideways (x) and vertically (z),
+    shake_hz: float = 3.           # a quarter period apart, shake_mm amplitude (8 mm at 3 Hz: ~2.8 m/s^2 peak),
+    shake_mm: float = 8.           # then rest_ticks still before the drop check. Holding still only never punished
+    rest_ticks: int = 30           # a grip too loose to survive a bump, so the most cautious method always won.
     hold_ticks: int = 120
     lift_m: float = .05
     alloc_every: int = 4
@@ -97,7 +109,11 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     nrm = np.array([snap['contacts'][f]['normal_obj'] for f in FINGERS], float)
     nrm = np.array([safe_normal(n, p) for n, p in zip(nrm, pos)])
     reg = np.array([snap['contacts'][f]['region'] for f in FINGERS])
-    allocs = [Allocator(Contacts(pos, nrm, reg, list(FINGERS)), part.k, mode=m) for m in modes]
+    def make_alloc(m):
+        kw = dict(slip_weight=cfg.risk_slip_weight, risk_slack_weight=1000.) \
+            if cfg.risk_safety and m in ('risk', 'oracle', 'cap') else {}
+        return Allocator(Contacts(pos, nrm, reg, list(FINGERS)), part.k, mode=m, **kw)
+    allocs = [make_alloc(m) for m in modes]
     ctrl = {f: BatchForceController(E) for f in FINGERS}
     for f in FINGERS:
         ctrl[f].in_contact[:] = True
@@ -119,7 +135,9 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
     q_up, _ = sc.ik(wpos+np.array([0, 0, cfg.lift_m]), wquat)
     q_lift = q_arm0+(q_up-q_here)
     S = cfg.settle_ticks
-    n_ticks = S+cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
+    n_shake = cfg.shake_ticks+(cfg.rest_ticks if cfg.shake_ticks else 0)
+    n_ticks = S+cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks+n_shake
+    t_shake = S+cfg.preload_ticks+cfg.lift_ticks+cfg.hold_ticks
     log = dict(live_region_mismatch=np.zeros((n_ticks, E, 3), bool), fn=np.zeros((n_ticks, E, 3)), ft=np.zeros((n_ticks, E, 3)), target=np.zeros((n_ticks, E, 3)), region_F=np.zeros((n_ticks, E, part.k)),
                has=np.zeros((n_ticks, E, 3), bool), phase=[], obj_rot_deg=np.zeros((n_ticks, E)),
                obj_slip_mm=np.zeros((n_ticks, E)), alloc_ok=np.ones((n_ticks, E), bool),
@@ -141,7 +159,16 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
             phase = 'settle'
         else:
             u = t-S
-            phase = 'preload' if u < cfg.preload_ticks else 'lift' if u < cfg.preload_ticks+cfg.lift_ticks else 'hold'
+            phase = ('preload' if u < cfg.preload_ticks else 'lift' if u < cfg.preload_ticks+cfg.lift_ticks
+                     else 'hold' if t < t_shake else 'shake' if t < t_shake+cfg.shake_ticks else 'rest')
+        if t == t_shake and cfg.shake_ticks:
+            # joint offsets for a small wrist displacement along x and z (linearised around the hold pose)
+            wp, wq = sc.wrist_pose()
+            q0, _ = sc.ik(wp, wq)
+            d = cfg.shake_mm/1000.
+            dq_x = sc.ik(wp+np.array([d, 0, 0]), wq)[0]-q0
+            dq_z = sc.ik(wp+np.array([0, 0, d]), wq)[0]-q0
+            q_hold = sc.target[:, :6].copy()
         if t == S:
             start_center, _ = sc.object_pose()
             p_h0, R_h0 = in_hand()
@@ -150,8 +177,9 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
         if t >= S and (t-S) % cfg.alloc_every == 0:
             for e in range(E):
                 w = gravity_wrench(mass[e]*(1+cfg.mass_margin), R[e])
+                soft = cfg.risk_safety if cfg.risk_safety and modes[e] in ('risk', 'oracle', 'cap') else cfg.safety
                 kw = dict(w_ext=w, mu=cfg.mu_hat/cfg.min_safety, fmax=cfg.fmax_N, margin=cfg.margin_N,
-                          safety=max(1., cfg.safety/cfg.min_safety))       # soft cone stays at mu_hat / safety
+                          safety=max(1., soft/cfg.min_safety))             # soft cone at mu_hat / soft
                 if modes[e] == 'risk':
                     kw.update(hazard=hazard[e], eps=cfg.eps)
                 elif modes[e] == 'oracle':
@@ -179,6 +207,13 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
         if phase == 'lift':
             s = (t-S-cfg.preload_ticks+1)/cfg.lift_ticks
             tgt[:, :6] = q_arm0+(s*s*(3-2*s))*(q_lift-q_arm0)
+        elif phase == 'shake':
+            tau = (t-t_shake+1)/60.
+            env = min(1., (t-t_shake+1)/10., (t_shake+cfg.shake_ticks-t)/10.)     # 1/6 s fade in and out
+            w2 = 2*np.pi*cfg.shake_hz*tau
+            tgt[:, :6] = q_hold+env*(np.sin(w2)*dq_x+np.sin(w2+np.pi/2)*dq_z)
+        elif phase == 'rest':
+            tgt[:, :6] = q_hold
         sc.step(tgt)
         # damage: per-finger solver force at the region of its contact point
         c = sc.finger_contacts()

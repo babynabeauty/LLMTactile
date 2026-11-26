@@ -55,6 +55,13 @@ def main():
     ap.add_argument('--mu', type=float, default=.6, help='true contact friction')
     ap.add_argument('--mu-hat', type=float, default=.5, help="allocator's friction estimate")
     ap.add_argument('--safety', type=float, default=2.)
+    ap.add_argument('--min-safety', type=float, default=1., help='hard cone at mu_hat / min_safety, every method')
+    ap.add_argument('--risk-safety', type=float, default=None,
+                    help='soft slip-margin target for the belief-aware methods (vlm/model/prior/oracle): they take '
+                         'as much margin as the damage budget allows (e.g. 4). Default: --safety, like equal/tactile')
+    ap.add_argument('--shake-s', type=float, default=0., help='disturbance after the hold: wrist shake duration')
+    ap.add_argument('--shake-hz', type=float, default=3.)
+    ap.add_argument('--shake-mm', type=float, default=8.)
     ap.add_argument('--preload-s', type=float, default=1.,
                     help='preload ramp duration; the thumb ramping up pushes index/middle over target until the '
                          'force controller catches up (065-d: ~0.1 N over during a 0.5 s ramp)')
@@ -110,7 +117,8 @@ def main():
     from risk_mvp.episode import safe_normal
     from risk_mvp.scene import quat_to_mat
     from risk_mvp.snapshot import swap_window
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=max(1, int(round(a.preload_s*60))))
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=max(1, int(round(a.preload_s*60))),
+                      min_safety=a.min_safety, risk_safety=a.risk_safety, shake_ticks=int(round(a.shake_s*60)), shake_hz=a.shake_hz, shake_mm=a.shake_mm)
     pts = {f: np.array(snap['contacts'][f]['point_obj']) for f in FINGERS}
     nrms = {f: safe_normal(np.array(snap['contacts'][f]['normal_obj'], float), pts[f]) for f in FINGERS}
     eqf, wi, wm = swap_window(pts, nrms, quat_to_mat(snap['obj_quat']), mass=a.mass, mu=a.mu_hat, safety=a.safety,
@@ -243,7 +251,7 @@ def main():
             ax.set_title(f'{m}, weak under {s}' + (' - BROKE' if ev else ''), fontsize=9)
     axs[0, 0].legend(fontsize=7)
     for ax in axs[-1]:
-        ax.set_xlabel('s (settle | preload | lift | hold)')
+        ax.set_xlabel('s (settle | preload | lift | hold | shake | rest)')
     for ax in axs[:, 0]:
         ax.set_ylabel('normal force N (dashed: target)')
     fig.tight_layout()
@@ -275,7 +283,7 @@ def main():
                 ax.set_title(f'weak under {s}', fontsize=9)
     axs[0, 0].legend(fontsize=7, title='median, band = min..max', title_fontsize=7)
     for ax in axs[-1]:
-        ax.set_xlabel('s (settle | preload | lift | hold)')
+        ax.set_xlabel('s (settle | preload | lift | hold | shake | rest)')
     fig.suptitle(f'{a.object}: does the object turn or slide in the hand?')
     fig.tight_layout()
     fig.savefig(a.out/'swap_inhand.png', dpi=110)
