@@ -31,7 +31,9 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 FINGERS = ('thumb', 'index', 'middle')
-STABLE_OBJECTS = ['065-a_cups', '065-d_cups', '015_peach', '018_plum', '056_tennis_ball', '061_foam_brick']
+# objects where the methods differ: 065-a every method held (no contrast), plum nearly no method could
+# (its grasp barely holds and its thresholds are tiny); evaluate those separately
+STABLE_OBJECTS = ['015_peach', '056_tennis_ball', '061_foam_brick', '065-d_cups']
 
 
 def load_model(path):
@@ -91,7 +93,7 @@ def run_object(oid, a, labels, manifest, models, rng, out):
     sc.set_friction(np.array([r['mu'] for r in inst]))
     fr = {f: snap['contacts'][f]['region'] for f in FINGERS}
     G = CD.region_features(manifest[oid])
-    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, min_safety=a.min_safety)
+    cfg = TrialConfig(mu_hat=a.mu_hat, safety=a.safety, min_safety=a.min_safety, oracle_margin_N=a.oracle_margin)
     # probe: settle phase only (same start forces for every method)
     probe = run_trial(sc, snap, part, ['equal']*E, thr, TrialConfig(mu_hat=a.mu_hat, safety=a.safety, preload_ticks=1,
                                                                       lift_ticks=1, hold_ticks=1), mass_kg=mass)
@@ -211,6 +213,9 @@ def main():
                     help='hard cone at mu_hat / min_safety for every method (1: none; then the risk allocators '
                          'and the oracle dropped 19-36 %% of the grasps)')
     ap.add_argument('--sigma', type=float, default=.5)
+    ap.add_argument('--oracle-margin', type=float, default=.25,
+                    help='N below the true thresholds for the oracle (about the force-tracking error; 0.1 N left it '
+                         'breaking 11-17 %% on peach, 065-d and the foam brick)')
     ap.add_argument('--scale-range', type=float, nargs=2, default=[1., 1.])
     ap.add_argument('--max-rot-deg', type=float, default=20., help='also report grasps that stayed under this')
     ap.add_argument('--seed', type=int, default=100)
@@ -231,6 +236,8 @@ def main():
             import traceback
             skipped[oid] = f'{type(exc).__name__}: {exc}'
             print(f'{oid} skipped: {skipped[oid]}\n{traceback.format_exc()[-1500:]}', flush=True)
+    if not (a.out/'episodes.jsonl').read_text().strip():
+        raise SystemExit(f'no episodes: every object was skipped {skipped}')
     S, methods, G = summarise(a.out, a.max_rot_deg)
     S['skipped'] = skipped
     S['config'] = {k: (str(v) if isinstance(v, Path) else v) for k, v in vars(a).items()}

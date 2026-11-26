@@ -52,6 +52,8 @@ class TrialConfig:
                                   # the belief was tight and dropped 19-36 % of the grasps (eval_seq): the point
                                   # contact model leaves out in-hand rotation, lift acceleration, tracking error
     margin_N: float = .1          # force-estimate margin in the damage constraint
+    oracle_margin_N: float = None  # the oracle's margin under the true thresholds (None: margin_N). 0.1 N is
+                                   # below the force-tracking error: the oracle broke 11-17 % (eval_seq)
     eps: float = .05              # damage budget for the risk mode
     mass_margin: float = .1
     fmax_N: float = 8.
@@ -154,6 +156,8 @@ def run_trial(sc, snap: dict, part, modes: Sequence[str], thresholds: np.ndarray
                     kw.update(hazard=hazard[e], eps=cfg.eps)
                 elif modes[e] == 'oracle':
                     kw.update(limit=thresholds[e])
+                    if cfg.oracle_margin_N is not None:
+                        kw.update(margin=cfg.oracle_margin_N)
                 elif modes[e] == 'cap':
                     kw.update(limit=np.full(part.k, cap_N[e] if cap_N is not None else 2.))
                 rep = allocs[e].solve(**kw)
