@@ -9,6 +9,8 @@ the method's own forces (no exploration scale):
   bayes            the same handwritten belief updated exactly (grid Bayes, shared object scale) with the
                    censored outcomes of this method's earlier grasps (bayes_prior.py): the strong
                    handwritten baseline - updating without learning
+  bayes_novlm      the same updates from an uninformative prior (class median 3.2 N, wider, no region
+                   labels): what the first grasps lose without Astra
   model            risk allocator, trained risk model (--model): Astra's labels + geometry + settle-phase
                    touch + the archive of THIS method's earlier grasps of the instance
   model_novlm      the same with a model trained without Astra's answers (--model-novlm), if given
@@ -121,10 +123,12 @@ def run_object(oid, a, labels, manifest, models, rng, out):
                 model, mcfg, no_vlm = models[name]
                 hazard[idx] = model_hazard(model, mcfg, no_vlm, [inst[e] for e in idx], oid, G,
                                            [settle[e] for e in idx], [archives[e] for e in idx], a.sigma)
-        idx = [e for e, (_, m) in enumerate(envs) if m == 'bayes']
-        for e in idx:
-            hazard[e] = B.hazard(inst[e]['vlm'], inst[e]['vlm_object'], part.k, archives[e])
-        modes = ['risk' if m in ('prior', 'bayes', 'model', 'model_novlm') else m for _, m in envs]
+        for e, (_, m) in enumerate(envs):
+            if m == 'bayes':
+                hazard[e] = B.hazard(inst[e]['vlm'], inst[e]['vlm_object'], part.k, archives[e])
+            elif m == 'bayes_novlm':
+                hazard[e] = B.hazard({}, {}, part.k, archives[e])
+        modes = ['risk' if m in ('prior', 'bayes', 'bayes_novlm', 'model', 'model_novlm') else m for _, m in envs]
         res = run_trial(sc, snap, part, modes, thr, cfg, mass_kg=mass, hazard=hazard)
         for e, (i, m) in enumerate(envs):
             tact, hist, _ = settle[e]
@@ -151,8 +155,8 @@ def C_prior(rec, k, sigma):
 
 def summarise(out: Path, max_rot_deg):
     rows = [json.loads(l) for l in open(out/'episodes.jsonl')]
-    methods = sorted({r['method'] for r in rows}, key=lambda m: ['equal', 'tactile', 'prior', 'bayes', 'model_novlm',
-                                                                 'model', 'oracle'].index(m))
+    methods = sorted({r['method'] for r in rows}, key=lambda m: ['equal', 'tactile', 'prior', 'bayes_novlm', 'bayes',
+                                                                 'model_novlm', 'model', 'oracle'].index(m))
     G = max(r['grasp'] for r in rows)+1
     S = dict(n=len(rows), methods={}, max_rot_deg=max_rot_deg)
     for m in methods:
@@ -210,7 +214,7 @@ def main():
     ap.add_argument('--out', type=Path, default=ROOT/'outputs/risk_mvp/eval_seq')
     ap.add_argument('--objects', nargs='*', default=STABLE_OBJECTS)
     ap.add_argument('--methods', nargs='*',
-                    default=['equal', 'tactile', 'prior', 'bayes', 'model_novlm', 'model', 'oracle'])
+                    default=['equal', 'tactile', 'prior', 'bayes_novlm', 'bayes', 'model_novlm', 'model', 'oracle'])
     ap.add_argument('--instances', type=int, default=12, help='instances per object')
     ap.add_argument('--grasps', type=int, default=10)
     # instance generation as collect.py

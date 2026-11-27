@@ -34,7 +34,7 @@ for d in sorted(out.iterdir()):
         for m, v in S['methods'].items():
             rows.append((d.name, m, v['overall']['success'], v['by_grasp']['success'][0], v['by_grasp']['success'][-1],
                          v['overall']['broke'], v['overall']['dropped']))
-methods = ['equal', 'tactile', 'prior', 'bayes', 'model_novlm', 'model', 'oracle']
+methods = ['equal', 'tactile', 'prior', 'bayes_novlm', 'bayes', 'model_novlm', 'model', 'oracle']
 print('\nheld-out objects: success all grasps / first grasp / last grasp')
 print(f"{'object':16s}" + ''.join(f'{m:>17s}' for m in methods))
 for o in sorted({r[0] for r in rows}):
