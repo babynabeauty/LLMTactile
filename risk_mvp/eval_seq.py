@@ -60,7 +60,7 @@ def model_hazard(model, cfg, no_vlm, recs, oid, G, settle, archives, sigma):
     samples = []
     for rec, (tact, hist, fr), arc in zip(recs, settle, archives):
         obj, vlm_part, extra = CD.instance_obj(rec, oid, cfg, sigma, no_vlm)
-        cards = np.concatenate([vlm_part, G, tact, extra], 1).astype(np.float32)
+        cards = CD.with_summary(np.concatenate([vlm_part, G, tact, extra], 1).astype(np.float32), arc[-10:], cfg)
         rows = [dict(region=r, broke=False, lower=1., upper=np.inf, max_force=0., hist=hist[r])
                 for r in sorted(set(fr.values()))]                           # carries the history; no label
         samples.append(dict(obj=obj, cards=cards, rows=rows,

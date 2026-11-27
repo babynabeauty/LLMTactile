@@ -27,11 +27,40 @@ import numpy as np
 
 from risk_mvp.risk_model import GEOM_DIM, HIST_LEN, N_LABELS, TACT_DIM, RiskConfig
 
-EXTRA_DIM = 6      # object strength one-hot (3), log object median, log prior median of the region, prior sigma
+PRIOR_DIM = 6      # object strength one-hot (3), log object median, log prior median of the region, prior sigma
+SUMMARY_DIM = 5    # this region's own archive: any survival, log max survived force, any break, log min break
+                   # upper bound, log max break lower bound
+EXTRA_DIM = PRIOR_DIM+SUMMARY_DIM
 
 
 def collect_config(**kw) -> RiskConfig:
     return RiskConfig(extra_dim=EXTRA_DIM, **kw)
+
+
+def archive_summary(rows, k: int) -> np.ndarray:
+    """(k, SUMMARY_DIM) per-region digest of the archive rows. The archive cards carry only the region's
+    geometry, so the model had to match cards to regions by geometry; on an unseen object that failed
+    (held-out 065-d: 10 breaks of the thumb region at 1.87 N and the model kept pressing 2 N)."""
+    S = np.zeros((k, SUMMARY_DIM))
+    for row in rows:
+        r = row['region']
+        if row['broke']:
+            lu, ll = np.log(max(row['upper'], 1e-3)), np.log(max(row['lower'], 1e-3))
+            S[r, 3] = lu if S[r, 2] == 0 else min(S[r, 3], lu)
+            S[r, 4] = ll if S[r, 2] == 0 else max(S[r, 4], ll)
+            S[r, 2] = 1.
+        else:
+            ll = np.log(max(row['lower'], 1e-3))
+            S[r, 1] = ll if S[r, 0] == 0 else max(S[r, 1], ll)
+            S[r, 0] = 1.
+    return S
+
+
+def with_summary(cards_base: np.ndarray, rows, cfg: RiskConfig) -> np.ndarray:
+    """Region cards = base cards + the archive summary (only for configs that have its columns)."""
+    if cfg.extra_dim < EXTRA_DIM:
+        return cards_base
+    return np.concatenate([cards_base, archive_summary(rows, cards_base.shape[0])], 1).astype(np.float32)
 
 
 def prior_features(obj: dict, k: int, sigma: float = .5) -> np.ndarray:
@@ -106,7 +135,7 @@ def instance_obj(rec: dict, oid: str, cfg: RiskConfig, sigma: float = .5, no_vlm
         text[r] = text_embedding(v.get('reason', ''), cfg.text_dim)
     obj = dict(thr=np.array(rec['thresholds_N']), label=label, conf=conf, condition=rec['condition'], oid=oid,
                instance=rec.get('instance'), variant=rec['variant'], vlm=vlm, vlm_object=vlm_object)
-    extra = prior_features(obj, k, sigma) if cfg.extra_dim else np.zeros((k, 0))
+    extra = prior_features(obj, k, sigma) if cfg.extra_dim else np.zeros((k, 0))   # summary added later
     return obj, np.concatenate([np.eye(N_LABELS)[label], conf[:, None], text], 1), extra
 
 
@@ -180,11 +209,12 @@ def build(collect_dir: Path, appearance: Path, cfg: RiskConfig = RiskConfig(), m
             n = rng.integers(0, min(10, len(pool))+1) if n_archive is None else min(n_archive, len(pool))
             pick = rng.choice(len(pool), size=n, replace=False) if n else []
             arc = [archive_row(G, obj['label'], obj['conf'], pool[j]) for j in pick]
-            s = dict(obj=obj, cards=cards_of[g], rows=rows_of[g], archive=arc, policy=grasps[g]['policy'],
-                     scale=grasps[g]['scale'],
-                     pool=[archive_row(G, obj['label'], obj['conf'], row) for row in pool])  # redrawn per batch
+            s = dict(obj=obj, cards=with_summary(cards_of[g], [pool[j] for j in pick], cfg), cards_base=cards_of[g],
+                     rows=rows_of[g], archive=arc, policy=grasps[g]['policy'], scale=grasps[g]['scale'],
+                     pool=[archive_row(G, obj['label'], obj['conf'], row) for row in pool],  # redrawn per batch
+                     pool_rows=pool)
             if keep_novlm:
-                s['alt'] = dict(cards=cards_n_of[g],
+                s['alt'] = dict(cards_base=cards_n_of[g], cards=with_summary(cards_n_of[g], [pool[j] for j in pick], cfg),
                                 pool=[archive_row(G, obj_n['label'], obj_n['conf'], row) for row in pool])
             (val if key in val_keys else train).append(s)
     info = dict(episodes=len(eps), instances=len(keys), val_instances=len(val_keys),

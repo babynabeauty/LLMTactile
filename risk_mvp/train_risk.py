@@ -50,7 +50,15 @@ def redraw_archive(s, rng):
         return s
     pool = s['pool']
     n = int(rng.integers(0, min(10, len(pool))+1))
-    return dict(s, archive=[pool[j] for j in rng.choice(len(pool), size=n, replace=False)] if n else [])
+    pick = rng.choice(len(pool), size=n, replace=False) if n else []
+    out = dict(s, archive=[pool[j] for j in pick])
+    if 'pool_rows' in s and 'cards_base' in s:          # the per-region archive summary follows the redraw
+        from risk_mvp.collect_data import with_summary
+        out['cards'] = with_summary(s['cards_base'], [s['pool_rows'][j] for j in pick], REDRAW_CFG[0])
+    return out
+
+
+REDRAW_CFG = [RiskConfig()]          # set by train() for with_summary
 
 
 def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0, log=None, steps=None,
@@ -59,6 +67,7 @@ def train(samples, cfg, epochs, open_book=False, batch_size=128, lr=3e-4, seed=0
     using its Astra-withheld cards (sample['alt']), so the model learns both with and without the VLM and
     weighs Astra against geometry and the archive instead of following it."""
     torch.manual_seed(seed)
+    REDRAW_CFG[0] = cfg
     model = RiskModel(cfg).to(DEVICE)
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=1e-4)
     rng = np.random.default_rng(seed)
